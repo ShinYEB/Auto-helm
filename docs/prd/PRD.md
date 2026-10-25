@@ -2,7 +2,7 @@
 
 > 상태: 설계 초안 · 작성일: 2026-10-25 · 프로젝트명: Auto-helm
 >
-> 이 문서는 **무엇을 만들고 어떤 결과로 검증할지** 정의한다. API 필드, 저장 키, 장 단계별 처리 규칙은 하단의 설계 문서에서 관리한다.
+> 이 문서는 **무엇을 만들고 어떤 결과로 검증할지** 정의한다. API 필드, 저장 키, 장 단계별 처리 규칙은 구현 과정에서 별도로 정의한다.
 
 ## 1. 배경과 문제
 
@@ -142,15 +142,3 @@ Mac은 dev/prd가 같은 물리 장비를 공유하는 단일 장애 지점이�
 | 예산·위험 한도 | 월별 모델·AWS 예산, 종목별·일별 주문 한도, 허용 손실과 운영 경보 수치를 확정한다. |
 | 시세 재표시 권한 | 한투 시세를 안드로이드 앱에 보여줄 수 있는 범위를 사용 조건에서 확인한다. |
 | Mac 장애 | 정전·네트워크·디스크 장애는 dev/prd에 함께 영향을 준다. 백업·복구 소요 시간과 수동 주문 중지 절차를 시험한다. |
-
-## 10. 관련 문서
-
-- [개요 블로그 글](../blog/01-overview.md)
-- [전체 설계 블로그 글](../blog/02-overall-design.md)
-- [시스템 설계](../architecture/ARCHITECTURE.md)
-- [데이터 수집·판정 흐름](../architecture/DATA_PIPELINE.md)
-- [데이터 저장·사용 계약](../architecture/DATA_CONTRACTS.md)
-- [KRX·NXT 시장 경계](../architecture/MARKETS.md)
-- [한국투자증권 연동](../architecture/KIS_INTEGRATION.md)
-- [dev/prd 환경과 승격](../architecture/ENVIRONMENTS.md)
-- [안드로이드 모니터링](../architecture/MOBILE_MONITORING.md)
