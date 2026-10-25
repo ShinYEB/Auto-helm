@@ -1,4 +1,4 @@
-# Auto-helm 고수준 설계 (HLD)
+# Auto-helm High-Level Design (HLD)
 
 > 상태: 초안 · 2026-10-26
 >
