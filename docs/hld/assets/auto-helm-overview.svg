@@ -1,0 +1,106 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 1400 820" width="1400" height="820" role="img" aria-labelledby="title desc">
+  <title id="title">Auto-helm 시스템 아키텍처</title>
+  <desc id="desc">한투 시세와 뉴스·공시가 Mac의 비동기 예측·분석을 거쳐 판단과 주문으로 이어지고, 요약은 AWS를 통해 안드로이드에서 조회된다.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#58677a"/>
+    </marker>
+    <style>
+      .bg { fill: #f8fafc; }
+      .outer { fill: #ffffff; stroke: #cbd5e1; stroke-width: 2; }
+      .box { fill: #ffffff; stroke: #cbd5e1; stroke-width: 2; }
+      .market { fill: #eaf3ff; stroke: #69a4e8; }
+      .event { fill: #f3ecff; stroke: #a687de; }
+      .decide { fill: #fff4dd; stroke: #e5ae53; }
+      .order { fill: #ffebea; stroke: #e69089; }
+      .store { fill: #eef2f7; stroke: #9aa9ba; }
+      .remote { fill: #e9f7f2; stroke: #68b79d; }
+      .title { font: 700 34px -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", sans-serif; fill: #17283d; }
+      .subtitle { font: 400 20px -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", sans-serif; fill: #52667d; }
+      .section { font: 700 23px -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", sans-serif; fill: #21364d; }
+      .label { font: 700 21px -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", sans-serif; fill: #193047; text-anchor: middle; }
+      .small { font: 400 17px -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", sans-serif; fill: #4e6479; text-anchor: middle; }
+      .note { font: 400 17px -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", sans-serif; fill: #52667d; }
+      .line { fill: none; stroke: #58677a; stroke-width: 3; marker-end: url(#arrow); stroke-linecap: round; stroke-linejoin: round; }
+      .dashed { fill: none; stroke: #8494a7; stroke-width: 2.5; stroke-dasharray: 7 6; marker-end: url(#arrow); stroke-linecap: round; stroke-linejoin: round; }
+    </style>
+  </defs>
+
+  <rect class="bg" width="1400" height="820"/>
+  <text class="title" x="50" y="62">Auto-helm 시스템 아키텍처</text>
+  <text class="subtitle" x="50" y="96">시세와 사건은 비동기로 처리하고, 위험 검사 뒤에만 주문한다</text>
+
+  <text class="section" x="60" y="154">외부 데이터</text>
+  <rect class="outer" x="270" y="125" width="745" height="635" rx="22"/>
+  <text class="section" x="305" y="163">Mac · 로컬 판단과 기록</text>
+  <text class="section" x="1060" y="154">외부 연동 · 원격 조회</text>
+
+  <rect class="box market" x="50" y="205" width="175" height="80" rx="14"/>
+  <text class="label" x="137" y="239">한투 시세</text>
+  <text class="small" x="137" y="265">KRX · NXT WS</text>
+  <rect class="box event" x="50" y="398" width="175" height="75" rx="14"/>
+  <text class="label" x="137" y="430">OpenDART</text>
+  <text class="small" x="137" y="455">공시 검색</text>
+  <rect class="box event" x="50" y="500" width="175" height="75" rx="14"/>
+  <text class="label" x="137" y="532">뉴스 제공처</text>
+  <text class="small" x="137" y="557">선정 필요</text>
+
+  <rect class="box market" x="310" y="205" width="190" height="80" rx="14"/>
+  <text class="label" x="405" y="239">시장 어댑터</text>
+  <text class="small" x="405" y="265">수신 · 누락 감지</text>
+  <rect class="box market" x="555" y="205" width="190" height="80" rx="14"/>
+  <text class="label" x="650" y="239">1분 데이터·예측</text>
+  <text class="small" x="650" y="265">1분 · 1시간 · 종료가</text>
+
+  <rect class="box event" x="310" y="405" width="190" height="80" rx="14"/>
+  <text class="label" x="405" y="439">사건 수집기</text>
+  <text class="small" x="405" y="465">중복·정정 처리</text>
+  <rect class="box event" x="555" y="405" width="190" height="80" rx="14"/>
+  <text class="label" x="650" y="439">AI 분석기</text>
+  <text class="small" x="650" y="465">비동기 사건 분석</text>
+
+  <rect class="box decide" x="795" y="305" width="185" height="85" rx="14"/>
+  <text class="label" x="887" y="340">판단 스냅샷</text>
+  <text class="small" x="887" y="369">시점·근거·버전</text>
+  <rect class="box order" x="795" y="515" width="185" height="85" rx="14"/>
+  <text class="label" x="887" y="549">위험 검사·주문</text>
+  <text class="small" x="887" y="578">의도 기록 · 대조</text>
+
+  <rect class="box store" x="555" y="640" width="190" height="85" rx="14"/>
+  <text class="label" x="650" y="674">로컬 원본 기록</text>
+  <text class="small" x="650" y="704">JSONL · Parquet</text>
+  <rect class="box store" x="795" y="640" width="185" height="85" rx="14"/>
+  <text class="label" x="887" y="674">요약 게시기</text>
+  <text class="small" x="887" y="704">주기·이벤트 게시</text>
+
+  <rect class="box order" x="1065" y="210" width="270" height="85" rx="14"/>
+  <text class="label" x="1200" y="244">한투 주문·계좌</text>
+  <text class="small" x="1200" y="273">모의 / 실전 REST</text>
+  <rect class="box remote" x="1065" y="385" width="270" height="80" rx="14"/>
+  <text class="label" x="1200" y="419">안드로이드 앱</text>
+  <text class="small" x="1200" y="446">상태 조회 전용</text>
+  <rect class="box remote" x="1065" y="515" width="270" height="80" rx="14"/>
+  <text class="label" x="1200" y="549">API Gateway · Lambda</text>
+  <text class="small" x="1200" y="576">인증 · 읽기 전용</text>
+  <rect class="box remote" x="1065" y="645" width="270" height="80" rx="14"/>
+  <text class="label" x="1200" y="679">AWS DynamoDB</text>
+  <text class="small" x="1200" y="706">dev/prd 조회 사본</text>
+
+  <path class="line" d="M225 245 H310"/>
+  <path class="line" d="M500 245 H555"/>
+  <path class="line" d="M225 435 H268 V445 H310"/>
+  <path class="line" d="M225 537 H255 V470 H310"/>
+  <path class="line" d="M500 445 H555"/>
+  <path class="line" d="M745 245 H765 V330 H795"/>
+  <path class="line" d="M745 445 H765 V370 H795"/>
+  <path class="line" d="M887 390 V515"/>
+  <path class="line" d="M980 555 H1035 V252 H1065"/>
+  <path class="line" d="M745 682 H795"/>
+  <path class="line" d="M980 682 H1065"/>
+  <path class="line" d="M1200 645 V595"/>
+  <path class="line" d="M1200 515 V465"/>
+  <path class="dashed" d="M405 485 V620 H555 V660"/>
+  <path class="dashed" d="M887 600 V640"/>
+
+  <text class="note" x="300" y="786">환경별 dev/prd 실행·계좌·저장·권한 분리 · AWS 장애 시 로컬 매매 경로 유지</text>
+</svg>
