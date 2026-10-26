@@ -42,6 +42,8 @@
 ./gradlew :control-tower:bootRun
 ```
 
+Mac에서 백그라운드로 유지하려면 로컬 `.env`에 `AUTOHELM_CONTROL_TOKEN`을 넣고 `python3 monitoring/control_service.py start`를 실행한다. `status`와 `stop` 명령으로 상태 확인과 종료를 할 수 있다. 감독 프로세스가 비정상 종료된 컨트롤타워를 다시 시작하며, 로그는 `data/dev/control/runtime/`에 남는다. 토큰 값은 명령행 인자나 로그에 쓰지 않는다.
+
 컨트롤타워는 기본적으로 로컬에서만 수신하며 API 요청마다 `X-Control-Token`을 검증한다. 화면에는 Grafana의 시세·사건 핵심 지표를 상태 카드와 1·6·24시간 차트로 표시한다. 컨트롤타워만 로컬 Prometheus(`127.0.0.1:9090`)에 접속하며, Prometheus가 중단되면 대시보드에 사용 불가 상태를 표시한다. 화면에서 dev 종목 관리, 과거 분봉 수집·모델 학습·dev 승격, 후보·활성 모델과 수집 정보 조회가 가능하다. 종목 설정은 환경별 파일에 저장되고 새 버전 수집기가 주기적으로 반영한다. prd 승격과 주문은 제공하지 않는다. `GET /api/snapshot`의 시세·예측 상태는 출력 기록을 통한 관측이며 프로세스 생존 확인과 구별된다. [컨트롤타워 설계](docs/lld/05-control-tower.md)에 API와 장애 동작을 기록했다.
 
 ### Redis 연결

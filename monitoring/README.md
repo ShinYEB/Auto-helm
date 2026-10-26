@@ -28,6 +28,10 @@ python3 monitoring/event_service.py stop
 
 수집기 로그와 감독 상태는 `data/dev/events/runtime/`, API 조회 결과와 `health.json`은 `data/dev/events/`에 남는다. `health.json`에는 프로세스 ID, 마지막 상태 갱신, 제공처별 조회·성공·실패·429·새 사건 누계를 기록한다. 키는 이 파일에 넣지 않는다. `monitoring/native.py stop`은 Prometheus·Grafana만 멈추며 사건 수집기는 별도로 관리한다.
 
+## 컨트롤타워
+
+컨트롤타워는 별도 감독 프로세스로 실행한다. `.env`의 `AUTOHELM_CONTROL_TOKEN`을 사용하며 `python3 monitoring/control_service.py start|status|stop`으로 관리한다. `monitoring/native.py`와 `event_service.py`의 시작·종료는 서로 독립적이다.
+
 ## Docker Compose
 
 Docker Desktop에서 새 컨테이너를 시작할 수 있을 때 사용할 수 있다. Mac에서 직접 실행 중인 Prometheus·Grafana와 포트가 겹치므로 먼저 `python3 monitoring/native.py stop`을 실행한다.
