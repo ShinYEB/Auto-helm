@@ -8,6 +8,8 @@
 | `event-data` | 독립 JAR·프로세스 | OpenDART 공시 원본, GDELT 뉴스 메타데이터 수집·중복 제거·로컬 기록 |
 | `price-prediction` | 독립 JAR·프로세스 | 확정 봉 Stream 소비, 1분·1시간 직전 종가 기준선과 사용 불가 상태 기록 |
 
+학습용 과거 시세의 일괄 조회는 `price-prediction` 안에 별도 배치 실행으로 추가할 계획이다. 현재는 구현되지 않았으며, 장중 Stream 소비와 같은 프로세스에서 실행하지 않는다.
+
 세 서비스는 서로의 내부 클래스나 메모리를 호출하지 않는다. 파일도 `data/<환경>/market/`, `data/<환경>/events/`, `data/<환경>/prediction/`으로 나눈다. `journal-bridge`는 시세·사건 서비스가 공유하는 JSONL 완성 행 읽기와 체크포인트 코드이며 실행 프로세스가 아니다.
 
 확정 1분봉은 파일 기록 후 별도 작업자가 Redis Stream `autohelm:<환경>:market:minute-bars:v1`에 발행하고, 예측기가 소비자 그룹에서 받는다. 사건과 종목 연결은 별도 작업자가 [Redis 조회 캐시](docs/lld/03-event-data.md#redis-조회-캐시)에 투영한다. 세 경로 모두 기본값은 꺼져 있다. AI 분석 결과 캐시는 아직 구현 전이다. 파일 기록은 원본으로 유지한다.
