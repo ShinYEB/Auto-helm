@@ -1,2 +1,2 @@
 rootProject.name = "auto-helm"
-include(":market-data", ":event-data")
+include(":journal-bridge", ":market-data", ":event-data", ":price-prediction")

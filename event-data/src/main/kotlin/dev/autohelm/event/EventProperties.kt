@@ -12,11 +12,19 @@ data class EventProperties(
     val dataDir: Path = Path.of("./data"),
     val gdelt: GdeltProperties = GdeltProperties(),
     val dart: DartProperties = DartProperties(),
+    val redis: EventRedisProperties = EventRedisProperties(),
 ) {
     init {
         require(environment in setOf("dev", "prd"))
         if (enabled) require(gdelt.enabled || dart.enabled) { "Enable at least one event source" }
     }
+}
+
+data class EventRedisProperties(
+    val enabled: Boolean = false,
+    val pollInterval: Duration = Duration.ofSeconds(2),
+) {
+    init { require(!pollInterval.isNegative && !pollInterval.isZero) }
 }
 
 data class GdeltProperties(

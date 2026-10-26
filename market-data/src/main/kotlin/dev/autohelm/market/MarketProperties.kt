@@ -19,6 +19,7 @@ data class MarketProperties(
     val appKey: String = "",
     val appSecret: String = "",
     val sessions: List<SessionWindow> = emptyList(),
+    val redis: MarketRedisProperties = MarketRedisProperties(),
 ) {
     init {
         require(environment == "dev" || environment == "prd")
@@ -35,6 +36,13 @@ data class MarketProperties(
             }
         }
     }
+}
+
+data class MarketRedisProperties(
+    val enabled: Boolean = false,
+    val pollInterval: Duration = Duration.ofSeconds(1),
+) {
+    init { require(!pollInterval.isNegative && !pollInterval.isZero) }
 }
 
 data class SessionWindow(

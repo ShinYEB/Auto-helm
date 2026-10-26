@@ -23,23 +23,29 @@ flowchart LR
     KIS["한국투자증권<br/>시세 WS · 주문/계좌 REST"] --> ING["Mac: 시세·계좌 수집"]
     DART["OpenDART<br/>공시 검색"] --> EVT["Mac: 사건 수집"]
     NEWS["뉴스 제공처<br/>선정 필요"] --> EVT
-    ING --> JOURNAL["환경별 원본 기록"]
+    ING --> MJ["시세 원본·확정 봉 파일"]
     ING --> BAR["확정 1분봉"]
-    BAR --> JOURNAL
-    JOURNAL --> REDIS["Redis Streams<br/>확정 봉 전달"]
-    REDIS --> WORK["비동기 처리<br/>예측 · AI 분석"]
-    JOURNAL --> ECACHE["Redis 사건 조회 캐시"]
+    BAR --> MJ
+    MJ --> REDIS["Redis Streams<br/>확정 봉 전달"]
+    REDIS --> PRED["비동기 가격 예측"]
+    PRED --> PJ["예측 파일 기록"]
+    EVT --> EJ["사건 원본·연결 파일"]
+    EJ --> AI["비동기 사건 분석"]
+    EJ --> ECACHE["Redis 사건 조회 캐시"]
+    AI --> EJ
     ECACHE --> DEC
     ECACHE --> PROJ
-    EVT --> JOURNAL
-    JOURNAL --> WORK
-    WORK --> DEC["판단 스냅샷 · 위험 검사"]
+    PRED --> DEC["판단 스냅샷 · 위험 검사"]
+    AI --> DEC
     ING --> DEC
     DEC --> ORD["주문 실행 · 증권사 대조"]
     ORD <--> KIS
-    DEC --> JOURNAL
-    ORD --> JOURNAL
-    JOURNAL --> PROJ["로컬 조회 상태 · 이력 분석"]
+    DEC --> AJ["판단·주문 기록"]
+    ORD --> AJ
+    MJ --> PROJ["로컬 조회 상태 · 이력 분석"]
+    EJ --> PROJ
+    PJ --> PROJ
+    AJ --> PROJ
     PROJ --> PUB["요약 게시기"]
     PUB --> DDB["AWS DynamoDB<br/>dev/prd 조회 사본"]
     APP["안드로이드 앱"] --> API["API Gateway → Lambda<br/>인증 · 읽기 전용"]

@@ -1,0 +1,10 @@
+spring:
+  main:
+    web-application-type: none
+
+prediction:
+  enabled: false
+  environment: dev
+  data-dir: ./data
+  max-lag: 30s
+  sessions: []

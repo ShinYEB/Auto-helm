@@ -1,29 +1,78 @@
 # Auto-helm
 
-국내 주식의 매매 판단과 결과 검증을 위한 개인 프로젝트다. Gradle 멀티모듈에서 두 개의 Spring Boot 서비스를 독립 실행한다. `market-data`는 [Market Data LLD](docs/lld/01-market-data.md)의 관찰용 시세 수집을, `event-data`는 [Event Data LLD](docs/lld/03-event-data.md)의 공시·뉴스 후보 수집을 담당한다. 주문, 가격 예측, AI 사건 분석, 모바일 API는 아직 연결하지 않았다.
+국내 주식의 매매 판단과 결과 검증을 위한 개인 프로젝트다. Gradle 멀티모듈에서 세 개의 Spring Boot 서비스를 독립 실행한다. `market-data`는 [Market Data LLD](docs/lld/01-market-data.md)의 관찰용 시세 수집을, `event-data`는 [Event Data LLD](docs/lld/03-event-data.md)의 공시·뉴스 후보 수집을 담당한다. `price-prediction`은 Redis Stream에서 봉을 받아 직전 종가 기준선을 기록한다. 주문, 학습 모델, AI 사건 분석, 모바일 API는 아직 연결하지 않았다.
 
 | 모듈 | 실행 단위 | 현재 책임 |
 | --- | --- | --- |
 | `market-data` | 독립 JAR·프로세스 | 한투 WebSocket 수신, KRX/NXT 1분봉, 로컬 기록 |
 | `event-data` | 독립 JAR·프로세스 | OpenDART 공시 원본, GDELT 뉴스 메타데이터 수집·중복 제거·로컬 기록 |
+| `price-prediction` | 독립 JAR·프로세스 | 확정 봉 Stream 소비, 1분·1시간 직전 종가 기준선과 사용 불가 상태 기록 |
 
-두 서비스는 서로의 내부 클래스나 메모리를 호출하지 않는다. 파일도 `data/<환경>/market/`과 `data/<환경>/events/`로 나눈다. 판단기와 연결할 서비스 간 계약은 소비자가 구현될 때 명시적으로 추가한다. 현재 단계에서 모듈 분리는 **실행·장애 경계**이며, 서비스 간 메시지 전달은 아직 구현하지 않았다.
+세 서비스는 서로의 내부 클래스나 메모리를 호출하지 않는다. 파일도 `data/<환경>/market/`, `data/<환경>/events/`, `data/<환경>/prediction/`으로 나눈다. `journal-bridge`는 시세·사건 서비스가 공유하는 JSONL 완성 행 읽기와 체크포인트 코드이며 실행 프로세스가 아니다.
 
-후속 단계에서는 확정 1분봉을 Redis Streams로 예측기에 전달하고, 사건·분석 결과의 종목별 조회에는 [Redis 캐시](docs/lld/03-event-data.md#redis-조회-캐시)를 사용한다. 둘 다 아직 코드에 연결되지 않았다. 파일에 저장한 원본 기록은 유지한다.
+확정 1분봉은 파일 기록 후 별도 작업자가 Redis Stream `autohelm:<환경>:market:minute-bars:v1`에 발행하고, 예측기가 소비자 그룹에서 받는다. 사건과 종목 연결은 별도 작업자가 [Redis 조회 캐시](docs/lld/03-event-data.md#redis-조회-캐시)에 투영한다. 세 경로 모두 기본값은 꺼져 있다. AI 분석 결과 캐시는 아직 구현 전이다. 파일 기록은 원본으로 유지한다.
 
 ## 실행 환경
 
 - Java 21
 - Kotlin 2.0.21, Spring Boot 3.5.16, Gradle 8.9 Wrapper
 - 한국투자증권 Open API의 WebSocket 접속 정보(실제 시세 수신 시)
+- Redis(선택; Stream 발행 또는 사건 캐시를 켤 때)
 
 ```bash
 ./gradlew test
 ./gradlew :market-data:bootRun
 ./gradlew :event-data:bootRun
+./gradlew :price-prediction:bootRun
 ```
 
-기본값은 `market.enabled=false`, `events.enabled=false`다. 이 상태에서는 두 앱의 기동만 확인하고 외부 API에 접속하지 않는다. 두 실행 앱은 각각 별도 프로세스나 파드로 배포한다.
+기본값은 `market.enabled=false`, `events.enabled=false`, `prediction.enabled=false`다. 이 상태에서는 앱의 기동만 확인하고 외부 API에 접속하지 않는다. 세 실행 앱은 각각 별도 프로세스나 파드로 배포한다.
+
+### Redis 연결
+
+개발용 Redis 예시는 `docker compose -f infra/redis/compose.yaml up -d`로 띄운다. Docker를 사용할 수 없으면 로컬 Redis를 설치하고 `mkdir -p data/dev/redis && redis-server --bind 127.0.0.1 --port 16379 --appendonly yes --dir ./data/dev/redis`로 실행할 수 있다. 두 방법 모두 로컬의 `127.0.0.1:16379`에만 열고 AOF를 사용한다. 각 앱의 별도 설정 파일에서 다음을 추가한다.
+
+```yaml
+spring:
+  data:
+    redis:
+      host: 127.0.0.1
+      port: 16379
+market:
+  redis:
+    enabled: true
+events:
+  redis:
+    enabled: true
+```
+
+각 서비스에는 해당 서비스의 설정 블록만 넣는다. `dev`와 `prd`는 Redis 인스턴스와 인증 정보까지 분리한다. 발행·투영 작업은 완성된 파일 행만 읽고, Redis 성공 후 파일 체크포인트를 전진시킨다. Redis가 비어 있으면 파일에서 재생성한다. 재생 과정에서 Stream 항목이 중복될 수 있으므로 예측 소비자는 봉 ID로 중복을 제거해야 한다. 캐시가 준비되지 않았거나 투영기가 15초 넘게 응답하지 않으면 사건 조회는 `available=false`를 반환한다. 현재 프로젝트에는 이를 외부에 제공하는 API가 없다.
+
+예측기는 별도 설정 파일에서 `prediction.enabled=true`, 동일한 환경 이름·Redis 주소, 확인된 거래일의 시장별 장 구간을 설정한다. 예를 들면 다음과 같다.
+
+```yaml
+spring:
+  data:
+    redis:
+      host: 127.0.0.1
+      port: 16379
+prediction:
+  enabled: true
+  environment: dev
+  data-dir: ./data
+  sessions:
+    - venue: KRX
+      name: regular
+      dates: ["2026-10-26"]
+      start: "09:00:00"
+      end: "15:30:00"
+```
+
+```bash
+./gradlew :price-prediction:bootRun --args='--spring.config.additional-location=file:/absolute/path/prediction-dev.yml'
+```
+
+예측기는 `READY` 봉에 대해 같은 장 구간 안의 다음 1분과 정확히 60분 뒤 종가를 직전 종가로 예측한다. 지연·결손·장 종료는 사용 불가 상태로 기록한다. KRX 공식 종가와 NXT 종료 가격은 출처와 확정 규칙이 정해질 때까지 `ACTUAL_DEFINITION_UNCONFIRMED`로 기록하며 가격을 만들지 않는다. 이 기준선은 매매 판단에 연결되지 않는다.
 
 ## 한투 시세 수신 설정
 
@@ -108,6 +157,8 @@ GDELT URL을 따라가 언론사 기사 본문을 받지 않는다. 수집 결�
 ## 현재 검증 범위
 
 재생 데이터 테스트에서 KRX·NXT 봉 분리, 체결이 없는 분, 연결 중단, 잘못된 메시지, 재시작 후 중복 기록 방지를 확인한다. 2026-10-26에는 한투 **모의투자** WebSocket에서 `005930`의 KRX·NXT 체결 수신과 `READY` 1분봉 확정을 확인했다. 사건 수집은 로컬 HTTP 제공처를 사용한 페이지·메타데이터 파싱, 기록·재시작 중복 방지 테스트까지 확인했다. OpenDART 실제 키를 통한 라이브 수집과 GDELT 3분 연속 수집의 지연·429 특성은 아직 확인하지 않았다. 주문 기능과 실전 계좌 연결도 검증하지 않았다.
+
+Redis 연결은 별도 임시 포트와 합성 데이터로 봉 발행 → 소비자 그룹 → 기준선 기록, 사건 캐시 투영, Redis 메모리 초기화 후 파일 재발행·캐시 재생성, 중복 예측 기록 방지를 확인했다. 기존 라이브 수집기의 설정이나 프로세스는 변경하지 않았다.
 
 ## 모니터링
 

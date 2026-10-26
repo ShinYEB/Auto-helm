@@ -6,6 +6,9 @@ events:
   enabled: false
   environment: dev
   data-dir: ./data
+  redis:
+    enabled: false
+    poll-interval: 2s
   gdelt:
     enabled: false
     searches: {}
