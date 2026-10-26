@@ -184,8 +184,8 @@ AWS에는 고빈도 체결 틱이나 원문 전체를 보내지 않는다. 최�
 | --- | --- | --- |
 | 실행 위치 | 사용 중인 Mac에서 로컬 판단·주문 실행 | Mac의 파드 실행을 위한 Linux VM·클러스터 배포 방식 |
 | 환경 분리 | dev/prd 별도 파드·저장 경로·자격 증명·주문 권한 | 배포 자동화와 승격 승인 절차 |
-| 백엔드 | 시세·분석·주문 작업자 분리, 제한된 비동기 대기열 | 구현 언어와 웹 프레임워크 |
-| 작업 복구 | 로컬 원본 기록과 처리 위치를 이용한 재생 | 환경별 단일 프로세스의 범위와 별도 메시지 브로커 도입 시점 |
+| 백엔드 | Kotlin·Spring Boot 3.x 멀티모듈. 시세 수집과 사건 수집을 별도 실행 서비스로 분리 | 분석·판단·주문 서비스의 배포 단위와 서비스 간 전달 계약 |
+| 작업 복구 | 서비스별 로컬 원본 기록과 처리 위치를 이용한 재생 | 서비스 간 전달 방식과 메시지 브로커 도입 시점 |
 | 예측·AI | 로컬 경량 시계열 예측, 외부 사건 분석 서비스 | 모델·라이브러리·분석 제공자와 버전 관리 방식 |
 | 로컬 저장 | 메모리, 환경별 JSONL 원본, Parquet 분석 파일, dev의 DynamoDB Local | 파일 회전·내구성·백업 구현 |
 | 클라우드 조회 | AWS DynamoDB, API Gateway, 읽기 전용 Lambda | 사용자 인증 수단, 테이블 키와 보존 기간 |
@@ -199,15 +199,21 @@ AWS에는 고빈도 체결 틱이나 원문 전체를 보내지 않는다. 최�
 flowchart LR
     subgraph MAC["Mac: 환경별 실행·저장 분리"]
         subgraph DEV["dev"]
-            DP["dev 파드<br/>관찰·모의주문"] --> DF["dev JSONL · Parquet"]
+            DM["market-data<br/>dev 파드"] --> DF["dev JSONL · Parquet"]
+            DE["event-data<br/>dev 파드"] --> DF
+            DP["후속 판단·주문<br/>dev 파드"] --> DF
             DP --> DL["DynamoDB Local<br/>개발·테스트"]
         end
         subgraph PRD["prd"]
-            PP["prd 파드<br/>제한된 실전주문"] --> PF["prd JSONL · Parquet"]
+            PM["market-data<br/>prd 파드"] --> PF["prd JSONL · Parquet"]
+            PE["event-data<br/>prd 파드"] --> PF
+            PP["후속 판단·주문<br/>prd 파드"] --> PF
         end
     end
-    DP --> VTS["한투 모의계좌"]
-    PP --> REAL["한투 실전계좌"]
+    DM --> VTS["한투 모의계좌"]
+    DP --> VTS
+    PM --> REAL["한투 실전계좌"]
+    PP --> REAL
     DP --> DD["AWS dev DynamoDB"]
     PP --> PD["AWS prd DynamoDB"]
     APP["안드로이드 앱"] --> DA["dev API Gateway → Lambda"]

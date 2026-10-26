@@ -1,0 +1,18 @@
+spring:
+  main:
+    web-application-type: none
+
+events:
+  enabled: false
+  environment: dev
+  data-dir: ./data
+  gdelt:
+    enabled: false
+    searches: {}
+    poll-interval: 3m
+    min-request-gap: 10s
+  dart:
+    enabled: false
+    api-key: ${DART_API_KEY:}
+    corp-codes: {}
+    poll-interval: 15m
