@@ -79,7 +79,7 @@ def start():
     base_env.pop("KIS_APP_SECRET", None)
     base_env.pop("DART_API_KEY", None)
     exporter_env = {**base_env, "AUTOHELM_DATA_ROOT": str(REPO / "data/dev"),
-                    "AUTOHELM_EXPORTER_HOST": "127.0.0.1", "AUTOHELM_TEST_DATE": "2026-10-26"}
+                    "AUTOHELM_EXPORTER_HOST": "127.0.0.1"}
     grafana_env = {**base_env, "GF_PATHS_PROVISIONING": str(ROOT / "grafana/provisioning"),
                    "GF_PATHS_DATA": str(ROOT / "grafana/data"), "GF_PATHS_LOGS": str(ROOT / "grafana/logs"),
                    "GF_SERVER_HTTP_ADDR": "127.0.0.1", "GF_SERVER_HTTP_PORT": "3000",

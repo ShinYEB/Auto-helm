@@ -16,7 +16,7 @@ from zoneinfo import ZoneInfo
 DATA_ROOT = Path(os.environ.get("AUTOHELM_DATA_ROOT", "/data/dev"))
 PORT = int(os.environ.get("AUTOHELM_EXPORTER_PORT", "9808"))
 HOST = os.environ.get("AUTOHELM_EXPORTER_HOST", "0.0.0.0")
-TEST_DATE = os.environ.get("AUTOHELM_TEST_DATE", "2026-10-26")
+TEST_DATE = os.environ.get("AUTOHELM_TEST_DATE")
 SEOUL = ZoneInfo("Asia/Seoul")
 
 
@@ -65,6 +65,14 @@ class Tail:
 
 class Metrics:
     def __init__(self):
+        self.date = None
+        self.reset_day(self.current_date())
+
+    def current_date(self):
+        return TEST_DATE or datetime.now(SEOUL).date().isoformat()
+
+    def reset_day(self, date):
+        self.date = date
         self.frames = Counter()
         self.last_frame = {"KRX": 0.0, "NXT": 0.0}
         self.bars = Counter()
@@ -73,9 +81,9 @@ class Metrics:
         self.log_errors = Counter()
         base = DATA_ROOT / "market"
         self.tails = [
-            Tail(base / "raw" / f"{TEST_DATE}.jsonl", self.raw),
-            Tail(base / "bars" / f"{TEST_DATE}.jsonl", self.bar),
-            Tail(base / "gaps" / f"{TEST_DATE}.jsonl", self.gap),
+            Tail(base / "raw" / f"{date}.jsonl", self.raw),
+            Tail(base / "bars" / f"{date}.jsonl", self.bar),
+            Tail(base / "gaps" / f"{date}.jsonl", self.gap),
         ]
         self.log_offset = 0
 
@@ -96,7 +104,7 @@ class Metrics:
         self.gaps[row["reason"]] += 1
 
     def update_log(self):
-        path = DATA_ROOT / f"market-day-{TEST_DATE}.log"
+        path = DATA_ROOT / f"market-day-{self.date}.log"
         try:
             size = path.stat().st_size
         except FileNotFoundError:
@@ -122,7 +130,7 @@ class Metrics:
                         self.log_errors[kind] += 1
 
     def status(self):
-        path = DATA_ROOT / f"market-day-{TEST_DATE}.status.json"
+        path = DATA_ROOT / f"market-day-{self.date}.status.json"
         try:
             return json.loads(path.read_text())
         except (FileNotFoundError, UnicodeDecodeError, json.JSONDecodeError):
@@ -130,14 +138,16 @@ class Metrics:
 
     def session_open(self, venue):
         now = datetime.now(SEOUL)
-        if now.date().isoformat() != TEST_DATE:
+        if now.date().isoformat() != self.date:
             return 0
         clock = now.time()
         if venue == "KRX":
-            return int(time(9, 0) <= clock < time(15, 30) or time(15, 40) <= clock < time(20, 0))
-        return int(time(9, 0, 30) <= clock < time(15, 20) or time(15, 40) <= clock < time(20, 0))
+            return int(time(9, 0) <= clock < time(15, 30))
+        return int(time(8, 0) <= clock < time(8, 50) or time(9, 0) <= clock < time(15, 20) or time(15, 40) <= clock < time(20, 0))
 
     def render(self):
+        if self.current_date() != self.date:
+            self.reset_day(self.current_date())
         for tail in self.tails:
             tail.update()
         self.update_log()
@@ -147,12 +157,14 @@ class Metrics:
         running = status.get("state") == "running" and status.get("collector_pid") is not None
         up = int(running and 0 <= now - heartbeat < 30)
 
+        restart_value = status.get("restarts", 0)
+        restart_total = sum(restart_value.values()) if isinstance(restart_value, dict) else int(restart_value)
         lines = [
             "# HELP autohelm_collector_up Collector and supervisor heartbeat are current.\n",
             "# TYPE autohelm_collector_up gauge\n",
             sample("autohelm_collector_up", up),
             sample("autohelm_supervisor_heartbeat_timestamp_seconds", heartbeat),
-            sample("autohelm_collector_restarts_total", int(status.get("restarts", 0))),
+            sample("autohelm_collector_restarts_total", restart_total),
         ]
         for venue in ("KRX", "NXT"):
             labels = {"venue": venue}

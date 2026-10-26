@@ -52,9 +52,11 @@ class ServiceStatus(
         if (!Files.exists(path)) return@observe missing("market-data")
         val node = mapper.readTree(Files.readAllBytes(path))
         val at = Instant.parse(node.path("at").asText())
+        val pid = node.path("collector_pid").asLong(-1)
+        val alive = pid > 0 && ProcessHandle.of(pid).map(ProcessHandle::isAlive).orElse(false)
         val state = if (node.path("state").asText() == "running" &&
-            Duration.between(at, clock.instant()) <= Duration.ofSeconds(30)) "RUNNING" else "RECORDED"
-        ServiceObservation("market-data", state, at, "시세 감독 상태 파일; 프로세스 상태는 별도 확인 필요")
+            alive && Duration.between(at, clock.instant()) <= Duration.ofSeconds(30)) "RUNNING" else "RECORDED"
+        ServiceObservation("market-data", state, at, "시세 감독 상태 파일과 수집기 PID")
     }
 
     private fun prediction(): ServiceObservation = observe("price-prediction") {
