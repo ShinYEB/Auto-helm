@@ -28,14 +28,14 @@
 | 뉴스토어 **일반** 뉴스데이터 | 기사 JSON/API. Full text 또는 200자 상품. 가격은 언론사 수와 이용 기간에 따라 계산 | 공개 표의 11개 미만 구간은 **매체당** 비영리 77,000원(Full text), 17,710원(200자). 이것을 월 요금으로 해석할 근거는 없으며 실제 견적 필요 | 상품 안내가 **인공지능 활용 금지**를 명시하므로 자동 LLM 분석에 사용하지 않음. [가격·조건](https://www.newstore.or.kr/store/prodct/newsdata/list.do) |
 | 뉴스토어 **AI용** 뉴스데이터 | JSON/API, 저장·분석·AI 학습 범위 안내. 검색 API 매뉴얼에 기사 ID와 여러 시각 필드가 있음 | **견적제.** 공개된 확정 금액·호출 한도 없음 | 뉴스 계약의 첫 후보. 개인 신청, 외부 LLM 추론 입력, 실시간 전달 지연, 사용 매체와 보존 기간을 계약으로 확인한 뒤 재결정. [AI 상품](https://www.newstore.or.kr/store/prodct/ainewsdata/list.do), [API 매뉴얼](https://www.newstore.or.kr/store/prodct/license-news-search/license-api-list.do) |
 | BigKinds Open API | 국내 언론사 검색·분석 | 개인 API 가격·한도 확인 불가 | 매뉴얼상 협약 공공기관·대학 중심이므로 개인 사용 경로로 채택하지 않음. [매뉴얼](https://www.bigkinds.or.kr/manual/%EB%B9%85%EC%B9%B4%EC%9D%B8%EC%A6%88_%EC%82%AC%EC%9A%A9%EC%9E%90%EB%A7%A4%EB%89%B4%EC%96%BC.pdf) |
-| GDELT DOC API | 글로벌 기사 제목·URL 목록. 조회 범위 최소 15분, 목록 기본 75·최대 250건 | 공개 API 접근, 별도 가격표·SLA 확인되지 않음 | 직접 시험에서 최신 국내 종목 검색 결과와 호출 안정성이 부족했다. 기사 본문 이용권도 제공하지 않아 주 수집원에서 제외. [API 설명](https://blog.gdeltproject.org/gdelt-doc-2-0-api-debuts/) |
+| GDELT DOC API | 글로벌 기사 제목·URL 목록. 조회 범위 최소 15분, 목록 기본 75·최대 250건 | 공개 API 접근, 별도 가격표·SLA 확인되지 않음 | 원문 제공·국내 종목의 1분 지연 목표 충족 여부가 확인되지 않아 주 수집원에서 제외. 이번 429는 시험 요청 간격 오류가 포함돼 안정성 판단 근거로 쓰지 않음. [API 설명](https://blog.gdeltproject.org/gdelt-doc-2-0-api-debuts/) |
 | NewsAPI | 무료 개발 플랜은 24시간 지연·100회/일·운영 사용 불가. Business는 실시간·월 250,000회, 기사 전문 미제공 | Business **미화 449달러/월**부터 | 본문 권한이 없고 개인 프로젝트 초기 비용에 비해 이점이 작아 제외. [공식 요금](https://newsapi.org/pricing) |
 
 뉴스토어 일반 상품의 공개 가격은 **AI용 상품 가격이 아니다.** 공개 표만으로 계약 기간별 총액이나 개인 사용자에게 적용할 가격을 계산하지 않는다.
 
 ## 실제 시험과 한계
 
-2026-10-26 13시대 KST에 로컬 Mac에서 GDELT DOC API를 `mode=artlist`, `format=json`, `sort=datedesc`, `maxrecords=100`으로 호출했다. 기사 내용은 저장하지 않았고 결과 개수·HTTP 상태·응답 시간만 기록했다.
+2026-10-26 13시대 KST에 로컬 Mac에서 GDELT DOC API를 `mode=artlist`, `format=json`, `sort=datedesc`, `maxrecords=100`으로 호출했다. 기사 내용은 저장하지 않았고 결과 개수·HTTP 상태·응답 시간만 기록했다. **최초 연속 요청은 2초 간격으로 실행했으며, 이후 429 응답 본문에서 최소 5초 간격 요구를 확인했다.** 이 시험 설정은 제공처 제한을 지키지 않았으므로 429를 서비스 불안정성이나 일반적인 허용량의 증거로 해석하지 않는다.
 
 | 질의 | 범위 | 관찰 결과 |
 | --- | --- | --- |
@@ -44,7 +44,7 @@
 | `Samsung Electronics` | 최근 1시간 | HTTP 429, 약 11.3초 |
 | `"Samsung Electronics"` | 최근 24시간, 별도 재시도 | HTTP 429, 약 12.0초 |
 
-이는 **한 시점의 작은 연결 시험**이다. GDELT가 해당 기업 뉴스를 항상 누락한다는 뜻은 아니다. 다만 현재 관찰만으로는 국내 종목의 1분 단위 사건 수집을 맡길 근거가 부족하다.
+이는 **한 시점의 작은 연결 시험**이다. GDELT가 해당 기업 뉴스를 항상 누락한다는 뜻은 아니다. 429 본문은 “5초마다 최대 한 요청”을 요구했고 `Retry-After` 헤더는 없었다. 나중에 5초 이상 간격을 두고 한 번 더 요청했을 때도 429였으므로 추가 제한 창이나 공유 IP 사용량이 있을 수 있지만, 정확한 원인은 응답으로 확인되지 않았다. [GDELT의 호출 제한 설명](https://blog.gdeltproject.org/ukraine-api-rate-limiting-web-ngrams-3-0/)
 
 OpenDART와 뉴스토어 테스트베드는 모두 API 키가 필요하다. 현재 실행 환경에 이 키들이 없어 **인증된 응답·실제 지연·일일 호출량을 시험하지 못했다.** 공식 문서의 엔드포인트·응답 필드 확인은 라이브 수신 시험과 구분한다. 네이버는 현행 이용 조건상 이 용도의 API 호출 시험을 진행하지 않았다.
 
