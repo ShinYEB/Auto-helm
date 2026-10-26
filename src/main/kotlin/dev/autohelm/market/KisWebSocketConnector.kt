@@ -27,6 +27,8 @@ class KisWebSocketConnector(
     private val mapper: ObjectMapper,
     private val worker: MarketWorker,
 ) {
+    private class SubscriptionRejected(message: String) : IllegalStateException(message)
+
     private val log = LoggerFactory.getLogger(javaClass)
     private val client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build()
     @Volatile private var running = false
@@ -65,12 +67,11 @@ class KisWebSocketConnector(
                 val ws = client.newWebSocketBuilder().connectTimeout(Duration.ofSeconds(10))
                     .buildAsync(URI.create(properties.wsUrl), listener).join()
                 socket = ws
-                waitSeconds = 1
                 listener.closed.join()
+                waitSeconds = 1
             } catch (ex: Exception) {
                 if (running) log.warn("KIS WebSocket connection failed: {}", ex.message)
-                // Keep the issued approval key across transient socket failures.
-                // The market-day collector runs for less than its 24-hour validity.
+                if (ex is SubscriptionRejected || ex.cause is SubscriptionRejected) key = null
             } finally {
                 socket = null
                 worker.connectionLost(Instant.now())
@@ -161,14 +162,17 @@ class KisWebSocketConnector(
                     log.info("KIS subscriptions confirmed: {}", confirmed.size)
                 }
             } else {
-                log.warn("KIS subscription rejected for {}", item)
+                val reason = node.path("body").path("msg1").asText().replace(approvalKey, "[redacted]").take(160)
+                log.warn("KIS subscription rejected for {}: code={}, reason={}",
+                    item, node.path("body").path("msg_cd").asText(), reason)
                 worker.connectionLost(Instant.now())
-                closed.completeExceptionally(IllegalStateException("KIS subscription rejected"))
+                closed.completeExceptionally(SubscriptionRejected("KIS subscription rejected"))
                 webSocket.abort()
             }
         }
 
         override fun onClose(webSocket: WebSocket, statusCode: Int, reason: String): CompletionStage<*> {
+            if (running) log.info("KIS WebSocket closed: status={}", statusCode)
             worker.connectionLost(Instant.now())
             closed.complete(Unit)
             return CompletableFuture.completedFuture(null)

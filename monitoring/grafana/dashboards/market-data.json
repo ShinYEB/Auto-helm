@@ -8,7 +8,7 @@
   ],
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 1,
+  "version": 2,
   "refresh": "15s",
   "time": {
     "from": "now-2h",
@@ -18,7 +18,7 @@
     {
       "id": 1,
       "type": "stat",
-      "title": "수집기 상태",
+      "title": "수집기 프로세스",
       "datasource": {
         "type": "prometheus",
         "uid": "autohelm-prometheus"
