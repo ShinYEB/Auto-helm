@@ -3,5 +3,7 @@
 build/
 .idea/
 data/
+__pycache__/
+*.pyc
 *.iml
 .env

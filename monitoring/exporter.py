@@ -1,0 +1,196 @@
+"""Read-only Prometheus exporter for the running market-day collector.
+
+The collector keeps its own JSONL journal. This process tails those files and
+never needs KIS credentials or access to the trading API.
+"""
+
+import json
+import os
+from collections import Counter
+from datetime import datetime, time
+from http.server import BaseHTTPRequestHandler, HTTPServer
+from pathlib import Path
+from zoneinfo import ZoneInfo
+
+
+DATA_ROOT = Path(os.environ.get("AUTOHELM_DATA_ROOT", "/data/dev"))
+PORT = int(os.environ.get("AUTOHELM_EXPORTER_PORT", "9808"))
+HOST = os.environ.get("AUTOHELM_EXPORTER_HOST", "0.0.0.0")
+TEST_DATE = os.environ.get("AUTOHELM_TEST_DATE", "2026-10-26")
+SEOUL = ZoneInfo("Asia/Seoul")
+
+
+def epoch(value):
+    if not value:
+        return 0.0
+    return datetime.fromisoformat(value.replace("Z", "+00:00")).timestamp()
+
+
+def sample(name, value, labels=None):
+    suffix = ""
+    if labels:
+        values = ",".join(f'{key}="{str(item).replace(chr(34), "")}"' for key, item in labels.items())
+        suffix = "{" + values + "}"
+    return f"{name}{suffix} {value}\n"
+
+
+class Tail:
+    def __init__(self, path, on_row):
+        self.path = path
+        self.on_row = on_row
+        self.offset = 0
+        self.inode = None
+        self.parse_errors = 0
+
+    def update(self):
+        try:
+            stat = self.path.stat()
+        except FileNotFoundError:
+            return
+        if self.inode != stat.st_ino or stat.st_size < self.offset:
+            self.offset = 0
+            self.inode = stat.st_ino
+        with self.path.open("rb") as source:
+            source.seek(self.offset)
+            while True:
+                line = source.readline()
+                if not line or not line.endswith(b"\n"):
+                    break
+                self.offset = source.tell()
+                try:
+                    self.on_row(json.loads(line))
+                except (UnicodeDecodeError, json.JSONDecodeError, KeyError, ValueError):
+                    self.parse_errors += 1
+
+
+class Metrics:
+    def __init__(self):
+        self.frames = Counter()
+        self.last_frame = {"KRX": 0.0, "NXT": 0.0}
+        self.bars = Counter()
+        self.last_ready_bar = {"KRX": 0.0, "NXT": 0.0}
+        self.gaps = Counter()
+        self.log_errors = Counter()
+        base = DATA_ROOT / "market"
+        self.tails = [
+            Tail(base / "raw" / f"{TEST_DATE}.jsonl", self.raw),
+            Tail(base / "bars" / f"{TEST_DATE}.jsonl", self.bar),
+            Tail(base / "gaps" / f"{TEST_DATE}.jsonl", self.gap),
+        ]
+        self.log_offset = 0
+
+    def raw(self, row):
+        parts = row["text"].split("|", 3)
+        venue = {"H0STCNT0": "KRX", "H0NXCNT0": "NXT"}.get(parts[1])
+        if venue:
+            self.frames[venue] += 1
+            self.last_frame[venue] = max(self.last_frame[venue], epoch(row["receivedAt"]))
+
+    def bar(self, row):
+        venue, quality = row["venue"], row["quality"]
+        self.bars[venue, quality] += 1
+        if quality == "READY":
+            self.last_ready_bar[venue] = max(self.last_ready_bar[venue], epoch(row["sealedAt"]))
+
+    def gap(self, row):
+        self.gaps[row["reason"]] += 1
+
+    def update_log(self):
+        path = DATA_ROOT / f"market-day-{TEST_DATE}.log"
+        try:
+            size = path.stat().st_size
+        except FileNotFoundError:
+            return
+        if size < self.log_offset:
+            self.log_offset = 0
+        with path.open("rb") as source:
+            source.seek(self.log_offset)
+            while True:
+                line = source.readline()
+                if not line or not line.endswith(b"\n"):
+                    break
+                self.log_offset = source.tell()
+                text = line.decode("utf-8", errors="replace")
+                for marker, kind in (
+                    ("WebSocket connection failed", "websocket_connection"),
+                    ("subscription rejected", "subscription_rejected"),
+                    ("Rejected market frame", "invalid_frame"),
+                    ("Market pipeline stopped", "pipeline_error"),
+                    ("collector exited with code", "collector_exit"),
+                ):
+                    if marker in text:
+                        self.log_errors[kind] += 1
+
+    def status(self):
+        path = DATA_ROOT / f"market-day-{TEST_DATE}.status.json"
+        try:
+            return json.loads(path.read_text())
+        except (FileNotFoundError, UnicodeDecodeError, json.JSONDecodeError):
+            return {}
+
+    def session_open(self, venue):
+        now = datetime.now(SEOUL)
+        if now.date().isoformat() != TEST_DATE:
+            return 0
+        clock = now.time()
+        if venue == "KRX":
+            return int(time(9, 0) <= clock < time(15, 30) or time(15, 40) <= clock < time(20, 0))
+        return int(time(9, 0, 30) <= clock < time(15, 20) or time(15, 40) <= clock < time(20, 0))
+
+    def render(self):
+        for tail in self.tails:
+            tail.update()
+        self.update_log()
+        status = self.status()
+        heartbeat = epoch(status.get("at"))
+        now = datetime.now(SEOUL).timestamp()
+        running = status.get("state") == "running" and status.get("collector_pid") is not None
+        up = int(running and 0 <= now - heartbeat < 30)
+
+        lines = [
+            "# HELP autohelm_collector_up Collector and supervisor heartbeat are current.\n",
+            "# TYPE autohelm_collector_up gauge\n",
+            sample("autohelm_collector_up", up),
+            sample("autohelm_supervisor_heartbeat_timestamp_seconds", heartbeat),
+            sample("autohelm_collector_restarts_total", int(status.get("restarts", 0))),
+        ]
+        for venue in ("KRX", "NXT"):
+            labels = {"venue": venue}
+            lines += [
+                sample("autohelm_market_session_open", self.session_open(venue), labels),
+                sample("autohelm_market_frames_total", self.frames[venue], labels),
+                sample("autohelm_market_last_frame_timestamp_seconds", self.last_frame[venue], labels),
+                sample("autohelm_market_last_ready_bar_timestamp_seconds", self.last_ready_bar[venue], labels),
+            ]
+            for quality in ("READY", "INCOMPLETE", "EMPTY_UNVERIFIED"):
+                lines.append(sample("autohelm_market_bars_total", self.bars[venue, quality], {"venue": venue, "quality": quality}))
+        for reason in ("DISCONNECTED", "INVALID_FRAME", "LATE_TICK", "QUEUE_OVERFLOW", "PROCESS_RESTART"):
+            lines.append(sample("autohelm_market_gaps_total", self.gaps[reason], {"reason": reason}))
+        for kind in ("websocket_connection", "subscription_rejected", "invalid_frame", "pipeline_error", "collector_exit"):
+            lines.append(sample("autohelm_market_log_events_total", self.log_errors[kind], {"kind": kind}))
+        lines.append(sample("autohelm_exporter_parse_errors_total", sum(t.parse_errors for t in self.tails)))
+        return "".join(lines).encode()
+
+
+METRICS = Metrics()
+
+
+class Handler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        if self.path not in ("/metrics", "/health"):
+            self.send_error(404)
+            return
+        try:
+            payload = METRICS.render() if self.path == "/metrics" else b"ok\n"
+        except Exception:
+            self.send_error(500)
+            return
+        self.send_response(200)
+        self.send_header("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
+        self.send_header("Content-Length", str(len(payload)))
+        self.end_headers()
+        self.wfile.write(payload)
+
+
+if __name__ == "__main__":
+    HTTPServer((HOST, PORT), Handler).serve_forever()
