@@ -15,7 +15,7 @@ class ManagedEventSymbolsTest {
     @TempDir lateinit var directory: Path
 
     @Test
-    fun `managed source settings replace YAML search and corp code`() {
+    fun `managed source settings override provided values and retain omitted YAML values`() {
         val mapper = jacksonObjectMapper().registerModule(JavaTimeModule())
         val at = Instant.parse("2026-10-26T01:00:00Z")
         val entry = WatchlistEntry("005930", "Samsung", setOf("KRX"),
@@ -30,6 +30,12 @@ class ManagedEventSymbolsTest {
         val managed = ManagedEventSymbols(props, mapper)
         assertThat(managed.gdeltSearches()).containsEntry("005930", "Samsung Electronics")
             .containsEntry("000660", "SK Hynix")
-        assertThat(managed.dartCorpCodes()).doesNotContainKey("005930")
+        assertThat(managed.dartCorpCodes()).containsEntry("005930", "00126380")
+
+        Files.write(path, mapper.writeValueAsBytes(WatchlistSnapshot(environment = "dev", revision = 2,
+            updatedAt = at, entries = mapOf(entry.symbol to entry.copy(enabled = false)))))
+        val disabled = ManagedEventSymbols(props, mapper)
+        assertThat(disabled.gdeltSearches()).doesNotContainKey("005930")
+        assertThat(disabled.dartCorpCodes()).doesNotContainKey("005930")
     }
 }

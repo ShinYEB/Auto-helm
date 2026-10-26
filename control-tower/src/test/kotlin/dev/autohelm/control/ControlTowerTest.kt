@@ -4,13 +4,10 @@ import com.fasterxml.jackson.databind.json.JsonMapper
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule
 import com.fasterxml.jackson.module.kotlin.kotlinModule
 import com.sun.net.httpserver.HttpServer
-import jakarta.servlet.FilterChain
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
-import org.springframework.mock.web.MockHttpServletRequest
-import org.springframework.mock.web.MockHttpServletResponse
 import java.nio.file.Files
 import java.nio.file.Path
 import java.net.InetSocketAddress
@@ -23,26 +20,7 @@ import java.time.ZoneOffset
 class ControlTowerTest {
     @TempDir lateinit var directory: Path
     private val mapper = JsonMapper.builder().addModule(kotlinModule()).addModule(JavaTimeModule()).build()
-    private val token = "test-control-token-more-than-32-characters"
-    private val props get() = ControlProperties(dataDir = directory, token = token)
-
-    @Test
-    fun `api rejects requests without operator token`() {
-        val filter = ApiTokenFilter(props)
-        val request = MockHttpServletRequest("POST", "/api/training/jobs")
-        val response = MockHttpServletResponse()
-        var called = false
-        val chain = FilterChain { _, _ -> called = true }
-        filter.doFilter(request, response, chain)
-        assertThat(response.status).isEqualTo(401)
-        assertThat(called).isFalse()
-        request.addHeader("X-Control-Token", token)
-        val accepted = MockHttpServletResponse()
-        filter.doFilter(request, accepted, chain)
-        assertThat(accepted.status).isEqualTo(200)
-        assertThat(called).isTrue()
-        assertThat(accepted.getHeader("Cache-Control")).isEqualTo("no-store")
-    }
+    private val props get() = ControlProperties(dataDir = directory)
 
     @Test
     fun `training request validates market and date before process launch`() {

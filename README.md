@@ -35,16 +35,16 @@
 
 ### 로컬 웹 콘솔
 
-콘솔은 컨트롤타워가 제공하며 브라우저는 다른 서비스와 직접 통신하지 않는다. 기본 접속 주소는 <http://127.0.0.1:8088/>이다. 32자 이상의 `AUTOHELM_CONTROL_TOKEN`을 컨트롤타워 프로세스의 환경 변수로 설정하고, 같은 값을 화면의 토큰 칸에 입력한다. 토큰은 저장소에 기록하지 않는다. 학습 배치를 화면에서 실행하려면 먼저 `./gradlew :model-training:bootJar`로 JAR를 만들고, 과거 시세 수집에는 `KIS_TRAINING_APP_KEY`와 `KIS_TRAINING_APP_SECRET`도 컨트롤타워 프로세스에 전달한다.
+콘솔은 컨트롤타워가 제공하며 브라우저는 다른 서비스와 직접 통신하지 않는다. 기본 접속 주소는 <http://127.0.0.1:8088/>이다. 로컬 전용 화면으로, 토큰 입력 없이 열린다. 학습 배치를 화면에서 실행하려면 먼저 `./gradlew :model-training:bootJar`로 JAR를 만들고, 과거 시세 수집에는 `KIS_TRAINING_APP_KEY`와 `KIS_TRAINING_APP_SECRET`도 컨트롤타워 프로세스에 전달한다.
 
 ```bash
 ./gradlew :model-training:bootJar :control-tower:bootJar
 ./gradlew :control-tower:bootRun
 ```
 
-Mac에서 백그라운드로 유지하려면 로컬 `.env`에 `AUTOHELM_CONTROL_TOKEN`을 넣고 `python3 monitoring/control_service.py start`를 실행한다. `status`와 `stop` 명령으로 상태 확인과 종료를 할 수 있다. 감독 프로세스가 비정상 종료된 컨트롤타워를 다시 시작하며, 로그는 `data/dev/control/runtime/`에 남는다. 토큰 값은 명령행 인자나 로그에 쓰지 않는다.
+Mac에서 백그라운드로 유지하려면 `python3 monitoring/control_service.py start`를 실행한다. `status`와 `stop` 명령으로 상태 확인과 종료를 할 수 있다. 감독 프로세스가 비정상 종료된 컨트롤타워를 다시 시작하며, 로그는 `data/dev/control/runtime/`에 남는다.
 
-컨트롤타워는 기본적으로 로컬에서만 수신하며 API 요청마다 `X-Control-Token`을 검증한다. 화면에는 Grafana의 시세·사건 핵심 지표를 상태 카드와 1·6·24시간 차트로 표시한다. 컨트롤타워만 로컬 Prometheus(`127.0.0.1:9090`)에 접속하며, Prometheus가 중단되면 대시보드에 사용 불가 상태를 표시한다. 화면에서 dev 종목 관리, 과거 분봉 수집·모델 학습·dev 승격, 후보·활성 모델과 수집 정보 조회가 가능하다. 종목 설정은 환경별 파일에 저장되고 새 버전 수집기가 주기적으로 반영한다. prd 승격과 주문은 제공하지 않는다. `GET /api/snapshot`의 시세·예측 상태는 출력 기록을 통한 관측이며 프로세스 생존 확인과 구별된다. [컨트롤타워 설계](docs/lld/05-control-tower.md)에 API와 장애 동작을 기록했다.
+컨트롤타워는 기본적으로 로컬에서만 수신한다. 화면에는 Grafana의 시세·사건 핵심 지표를 상태 카드와 1·6·24시간 차트로 표시한다. 컨트롤타워만 로컬 Prometheus(`127.0.0.1:9090`)에 접속하며, Prometheus가 중단되면 대시보드에 사용 불가 상태를 표시한다. 화면에서 dev 종목 관리, 과거 분봉 수집·모델 학습·dev 승격, 후보·활성 모델과 수집 정보 조회가 가능하다. 종목 설정은 환경별 파일에 저장되고 새 버전 수집기가 주기적으로 반영한다. prd 승격과 주문은 제공하지 않는다. `GET /api/snapshot`의 시세·예측 상태는 출력 기록을 통한 관측이며 프로세스 생존 확인과 구별된다. [컨트롤타워 설계](docs/lld/05-control-tower.md)에 API와 장애 동작을 기록했다.
 
 ### Redis 연결
 

@@ -13,11 +13,9 @@ data class ControlProperties(
     val dataDir: Path = Path.of("./data"),
     val trainingJar: Path = Path.of("./model-training/build/libs/model-training-0.1.0-SNAPSHOT.jar"),
     val prometheusUrl: URI = URI.create("http://127.0.0.1:9090"),
-    val token: String = "",
 ) {
     init {
         require(environment in setOf("dev", "prd"))
-        require(token.length >= 32) { "AUTOHELM_CONTROL_TOKEN must contain at least 32 characters" }
         require(prometheusUrl.scheme == "http" && prometheusUrl.host in setOf("127.0.0.1", "localhost") &&
             prometheusUrl.port in 1..65535 && prometheusUrl.rawUserInfo == null &&
             prometheusUrl.rawQuery == null && prometheusUrl.rawFragment == null) {

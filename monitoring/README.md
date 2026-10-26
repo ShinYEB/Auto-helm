@@ -30,7 +30,7 @@ python3 monitoring/event_service.py stop
 
 ## 컨트롤타워
 
-컨트롤타워는 별도 감독 프로세스로 실행한다. `.env`의 `AUTOHELM_CONTROL_TOKEN`을 사용하며 `python3 monitoring/control_service.py start|status|stop`으로 관리한다. `monitoring/native.py`와 `event_service.py`의 시작·종료는 서로 독립적이다.
+컨트롤타워는 별도 감독 프로세스로 실행한다. `python3 monitoring/control_service.py start|status|stop`으로 관리한다. 로컬 전용 화면은 토큰 없이 열린다. `monitoring/native.py`와 `event_service.py`의 시작·종료는 서로 독립적이다.
 
 ## Docker Compose
 

@@ -16,8 +16,8 @@ class ManagedEventSymbols(properties: EventProperties, mapper: ObjectMapper) {
     fun gdeltSearches(): Map<String, String> {
         val result = baseGdelt.toMutableMap()
         for ((symbol, entry) in reader.current().entries) {
-            result.remove(symbol)
-            if (entry.enabled) entry.gdeltQuery?.let { result[symbol] = it }
+            if (!entry.enabled) result.remove(symbol)
+            else entry.gdeltQuery?.let { result[symbol] = it }
         }
         return result
     }
@@ -25,8 +25,8 @@ class ManagedEventSymbols(properties: EventProperties, mapper: ObjectMapper) {
     fun dartCorpCodes(): Map<String, String> {
         val result = baseDart.toMutableMap()
         for ((symbol, entry) in reader.current().entries) {
-            result.remove(symbol)
-            if (entry.enabled) entry.dartCorpCode?.let { result[symbol] = it }
+            if (!entry.enabled) result.remove(symbol)
+            else entry.dartCorpCode?.let { result[symbol] = it }
         }
         return result
     }

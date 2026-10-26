@@ -15,7 +15,7 @@ class WatchlistStoreTest {
 
     @Test
     fun `updates preserve active venue time and disabled symbols remain auditable`() {
-        val store = WatchlistStore(ControlProperties(dataDir = directory, token = "x".repeat(32)), mapper)
+        val store = WatchlistStore(ControlProperties(dataDir = directory), mapper)
         val first = store.put("005930", SymbolInput(0, "Samsung", setOf("KRX"), "Samsung"))
         assertThat(first.revision).isEqualTo(1)
         assertThat(first.entries.getValue("005930").activeFrom).containsKey("KRX")
@@ -34,8 +34,7 @@ class WatchlistStoreTest {
 
     @Test
     fun `production watchlist cannot be edited`() {
-        val store = WatchlistStore(ControlProperties(environment = "prd", dataDir = directory,
-            token = "x".repeat(32)), mapper)
+        val store = WatchlistStore(ControlProperties(environment = "prd", dataDir = directory), mapper)
         assertThatThrownBy { store.put("005930", SymbolInput(0, "Samsung", setOf("KRX"))) }
             .isInstanceOf(IllegalArgumentException::class.java)
     }

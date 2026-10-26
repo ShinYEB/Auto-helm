@@ -1,4 +1,4 @@
-"""Keep the local dev control tower running without exposing its token in process arguments."""
+"""Keep the loopback-only dev control tower running in the background."""
 
 import json
 import os
@@ -15,7 +15,6 @@ ROOT = REPO / "data/dev/control/runtime"
 STATE = ROOT / "supervisor.json"
 LOG = ROOT / "control-tower.log"
 JAR = REPO / "control-tower/build/libs/control-tower-0.1.0-SNAPSHOT.jar"
-ENV_FILE = REPO / ".env"
 
 
 def alive(pid):
@@ -48,24 +47,17 @@ def ready():
         return False
 
 
-def secret_env():
-    if not ENV_FILE.exists():
-        raise RuntimeError("Missing local .env file")
-    values = dict(line.split("=", 1) for line in ENV_FILE.read_text().splitlines()
-                  if line.startswith("AUTOHELM_CONTROL_TOKEN="))
-    token = values.get("AUTOHELM_CONTROL_TOKEN", "").strip()
-    if len(token) < 32:
-        raise RuntimeError("AUTOHELM_CONTROL_TOKEN must have at least 32 characters")
+def process_env():
     env = os.environ.copy()
     env.pop("DART_API_KEY", None)
     env.pop("KIS_APP_KEY", None)
     env.pop("KIS_APP_SECRET", None)
-    env["AUTOHELM_CONTROL_TOKEN"] = token
+    env.pop("AUTOHELM_CONTROL_TOKEN", None)
     return env
 
 
 def run():
-    env = secret_env()
+    env = process_env()
     stopping = False
     child = None
     restarts = 0
@@ -109,8 +101,8 @@ def start():
     if ready():
         print("Port 8088 already serves a process; inspect it before starting another.")
         return 1
-    if not JAR.exists() or not ENV_FILE.exists():
-        print("Build control-tower and prepare local .env first.")
+    if not JAR.exists():
+        print("Build control-tower first.")
         return 1
     ROOT.mkdir(parents=True, exist_ok=True)
     env = os.environ.copy()
