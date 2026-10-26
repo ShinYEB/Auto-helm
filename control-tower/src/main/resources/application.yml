@@ -1,0 +1,9 @@
+server:
+  address: 127.0.0.1
+  port: 8088
+
+control:
+  environment: dev
+  data-dir: ./data
+  training-jar: ./model-training/build/libs/model-training-0.1.0-SNAPSHOT.jar
+  token: ${AUTOHELM_CONTROL_TOKEN:}

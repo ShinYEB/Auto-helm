@@ -1,6 +1,6 @@
 # Auto-helm
 
-국내 주식의 매매 판단과 결과 검증을 위한 개인 프로젝트다. Gradle 멀티모듈에서 세 개의 상주 Spring Boot 서비스와 하나의 학습 배치를 독립 실행한다. `market-data`는 [Market Data LLD](docs/lld/01-market-data.md)의 관찰용 시세 수집을, `event-data`는 [Event Data LLD](docs/lld/03-event-data.md)의 공시·뉴스 후보 수집을 담당한다. `price-prediction`은 Redis Stream에서 봉을 받아 기준선 또는 승인된 경량 모델의 예측을 기록한다. 주문, AI 사건 분석, 모바일 API는 아직 연결하지 않았다.
+국내 주식의 매매 판단과 결과 검증을 위한 개인 프로젝트다. Gradle 멀티모듈에서 세 개의 상주 데이터 서비스, 학습 배치, 운영용 컨트롤타워를 독립 실행한다. `market-data`는 [Market Data LLD](docs/lld/01-market-data.md)의 관찰용 시세 수집을, `event-data`는 [Event Data LLD](docs/lld/03-event-data.md)의 공시·뉴스 후보 수집을 담당한다. `price-prediction`은 Redis Stream에서 봉을 받아 기준선 또는 승인된 경량 모델의 예측을 기록한다. 주문, AI 사건 분석, 모바일 API는 아직 연결하지 않았다.
 
 | 모듈 | 실행 단위 | 현재 책임 |
 | --- | --- | --- |
@@ -9,6 +9,7 @@
 | `price-prediction` | 독립 JAR·프로세스 | 확정 봉 Stream 소비, 1분·1시간 직전 종가 기준선과 사용 불가 상태 기록 |
 | `model-training` | 실행 후 종료되는 배치 JAR | 한투 과거 분봉 조회·원본 기록, 경량 모델 학습, 명시적 모델 승격 |
 | `model-contract` | 라이브러리 | 모델 묶음의 형식·해시 검증·적재 |
+| `control-tower` | 독립 웹 서버·프로세스 | 로컬 웹 콘솔, 상태 집계, 인증된 dev 학습 배치 제어 |
 
 `model-training`은 가중치, 단일 특징 `logReturn1m`, 목표 정의, 데이터 해시, 시간순 검증 오차가 포함된 `ModelBundle.v1` 후보를 만든다. 운영 중인 `price-prediction`은 환경별로 승인된 묶음만 시작할 때 읽는다. 묶음이 없으면 기존 직전 종가 기준선을 사용한다. 첫 모델은 작은 선형 수익률 모델이며 상태 기반 신경망, 주간 거래 성과 평가와 자동 재학습은 아직 구현되지 않았다.
 
@@ -31,6 +32,17 @@
 ```
 
 기본값은 `market.enabled=false`, `events.enabled=false`, `prediction.enabled=false`다. 이 상태에서는 앱의 기동만 확인하고 외부 API에 접속하지 않는다. 세 실행 앱은 각각 별도 프로세스나 파드로 배포한다.
+
+### 로컬 웹 콘솔
+
+콘솔은 컨트롤타워가 제공하며 브라우저는 다른 서비스와 직접 통신하지 않는다. 기본 접속 주소는 <http://127.0.0.1:8088/>이다. 32자 이상의 `AUTOHELM_CONTROL_TOKEN`을 컨트롤타워 프로세스의 환경 변수로 설정하고, 같은 값을 화면의 토큰 칸에 입력한다. 토큰은 저장소에 기록하지 않는다. 학습 배치를 화면에서 실행하려면 먼저 `./gradlew :model-training:bootJar`로 JAR를 만들고, 과거 시세 수집에는 `KIS_TRAINING_APP_KEY`와 `KIS_TRAINING_APP_SECRET`도 컨트롤타워 프로세스에 전달한다.
+
+```bash
+./gradlew :model-training:bootJar :control-tower:bootJar
+./gradlew :control-tower:bootRun
+```
+
+컨트롤타워는 기본적으로 로컬에서만 수신하며 API 요청마다 `X-Control-Token`을 검증한다. 화면에서 dev 과거 분봉 수집·모델 학습·dev 승격을 실행할 수 있다. prd 승격과 주문은 제공하지 않는다. `GET /api/snapshot`의 시세·예측 상태는 출력 기록을 통한 관측이며 프로세스 생존 확인과 구별된다. [컨트롤타워 설계](docs/lld/05-control-tower.md)에 API와 장애 동작을 기록했다.
 
 ### Redis 연결
 

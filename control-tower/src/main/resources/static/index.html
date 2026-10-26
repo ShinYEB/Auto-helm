@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Auto-helm Control Tower</title>
+  <style>
+    :root { color-scheme: dark; font: 16px system-ui, sans-serif; background: #101820; color: #edf4f7; }
+    body { max-width: 1050px; margin: 0 auto; padding: 32px 20px 80px; }
+    h1 { margin-bottom: 4px; } .hint { color: #aac0ca; margin-top: 0; }
+    section { background: #1c2933; border: 1px solid #35505e; border-radius: 12px; padding: 20px; margin-top: 20px; }
+    label { display: grid; gap: 6px; color: #c4d4dc; font-size: .9rem; }
+    input, select, button { font: inherit; padding: 9px 11px; border-radius: 6px; border: 1px solid #56717e; background: #0e1b22; color: #fff; }
+    button { background: #126d82; border: 0; cursor: pointer; font-weight: 600; }
+    button:hover { background: #1789a2; } button:disabled { opacity: .5; cursor: default; }
+    .row { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; }
+    .row > label { flex: 1 1 130px; } .wide { flex: 3 1 260px !important; }
+    table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+    th, td { text-align: left; padding: 10px; border-bottom: 1px solid #35505e; }
+    th { color: #aac0ca; } .muted { color: #aac0ca; } .error { color: #ff9e9e; }
+    #message { min-height: 1.4em; } code { color: #a6ecf5; }
+  </style>
+</head>
+<body>
+  <h1>Auto-helm Control Tower</h1>
+  <p class="hint">서비스 상태 조회와 dev 학습 배치 실행. 이 화면은 컨트롤타워 API에만 접속합니다.</p>
+  <section>
+    <div class="row">
+      <label class="wide">컨트롤 토큰 <input id="token" type="password" autocomplete="off" placeholder="AUTOHELM_CONTROL_TOKEN"></label>
+      <button id="connect">연결</button>
+    </div>
+    <p id="message" class="muted">토큰은 현재 탭의 메모리에만 보관합니다.</p>
+  </section>
+  <section>
+    <h2>서비스 관측</h2>
+    <p class="muted">기록 기반 상태입니다. 마지막 갱신 시각이 오래되면 실행 중으로 판단하지 않습니다.</p>
+    <table><thead><tr><th>서비스</th><th>상태</th><th>관측 시각</th><th>근거</th></tr></thead><tbody id="services"></tbody></table>
+  </section>
+  <section>
+    <h2>학습 배치</h2>
+    <div class="row">
+      <label>작업 <select id="command"><option value="collect">과거 분봉 수집</option><option value="fit">모델 학습</option><option value="promote-dev">dev 모델 승격</option></select></label>
+      <label>종목코드 <input id="symbol" value="005930" maxlength="6"></label>
+      <label>시장 <select id="venue"><option>KRX</option><option>NXT</option></select></label>
+      <label>장 구간 <input id="session" value="regular"></label>
+    </div>
+    <div class="row" style="margin-top:12px">
+      <label>시작일 <input id="from" type="date"></label>
+      <label>종료일 <input id="to" type="date"></label>
+      <label>시작 시각 <input id="startTime" type="time" value="09:00"></label>
+      <label>종료 시각 <input id="endTime" type="time" value="15:30"></label>
+      <label>승격할 버전 <input id="version" placeholder="linret1-..."></label>
+      <button id="run">실행</button>
+    </div>
+    <p class="muted">한 번에 한 작업만 실행합니다. prd 승격과 주문은 이 화면에서 제공하지 않습니다.</p>
+    <table><thead><tr><th>작업</th><th>종목</th><th>상태</th><th>시작</th><th>종료 코드</th></tr></thead><tbody id="jobs"></tbody></table>
+  </section>
+  <script>
+    let token = '';
+    const $ = id => document.getElementById(id);
+    const message = (value, error = false) => { $('message').textContent = value; $('message').className = error ? 'error' : 'muted'; };
+    const cell = (row, value) => { const td = document.createElement('td'); td.textContent = value ?? '—'; row.appendChild(td); };
+    const fill = (id, rows, values) => {
+      const body = $(id); body.replaceChildren();
+      for (const item of rows) { const tr = document.createElement('tr'); values(item).forEach(value => cell(tr, value)); body.appendChild(tr); }
+    };
+    async function api(path, options = {}) {
+      const response = await fetch(path, { ...options, cache: 'no-store', headers: { 'X-Control-Token': token, 'Content-Type': 'application/json' } });
+      if (!response.ok) { const body = await response.json().catch(() => ({})); throw new Error(body.error || `HTTP ${response.status}`); }
+      return response.json();
+    }
+    async function refresh() {
+      if (!token) return;
+      try {
+        const data = await api('/api/snapshot');
+        message(`${data.environment} · ${new Date(data.at).toLocaleString('ko-KR')}`);
+        fill('services', data.services, s => [s.service, s.state, s.observedAt ? new Date(s.observedAt).toLocaleString('ko-KR') : '—', s.detail]);
+        fill('jobs', data.jobs, j => [j.command, j.symbol || '—', j.state, new Date(j.startedAt).toLocaleString('ko-KR'), j.exitCode]);
+      } catch (e) { message(e.message, true); }
+    }
+    $('connect').onclick = () => { token = $('token').value; $('token').value = ''; refresh(); };
+    $('run').onclick = async () => {
+      if (!token) return message('먼저 컨트롤 토큰으로 연결하세요.', true);
+      const request = Object.fromEntries(['command', 'symbol', 'venue', 'session', 'from', 'to', 'startTime', 'endTime', 'version'].map(id => [id, $(id).value]));
+      if (!request.from) delete request.from;
+      if (!request.to) delete request.to;
+      try { const job = await api('/api/training/jobs', { method: 'POST', body: JSON.stringify(request) }); message(`${job.command} 작업 ${job.id} 시작`); refresh(); }
+      catch (e) { message(e.message, true); }
+    };
+    setInterval(refresh, 10000);
+  </script>
+</body>
+</html>
