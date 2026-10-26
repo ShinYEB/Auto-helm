@@ -2,6 +2,7 @@ package dev.autohelm.prediction
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.kotlin.readValue
+import dev.autohelm.model.ModelBundleIO
 import jakarta.annotation.PreDestroy
 import org.slf4j.LoggerFactory
 import org.springframework.boot.context.event.ApplicationReadyEvent
@@ -27,7 +28,10 @@ class PredictionStreamConsumer(
     private val group = "price-prediction-v1"
     private val consumerName = "price-prediction-single"
     private val journal by lazy { PredictionJournal(properties, mapper) }
-    private val engine by lazy { BaselinePredictionEngine(properties, journal) }
+    private val engine by lazy {
+        val models = ModelBundleIO(mapper).loadActive(properties.dataDir.resolve(properties.environment).resolve("models"))
+        BaselinePredictionEngine(properties, journal, models = models)
+    }
     @Volatile private var running = false
     private var groupReady = false
     private var worker: Thread? = null
@@ -35,6 +39,7 @@ class PredictionStreamConsumer(
     @EventListener(ApplicationReadyEvent::class)
     fun start() {
         if (!properties.enabled || running) return
+        engine // Fail startup if the active model bundle is corrupt or incompatible.
         running = true
         worker = Thread(::loop, "price-prediction-consumer").also { it.start() }
     }

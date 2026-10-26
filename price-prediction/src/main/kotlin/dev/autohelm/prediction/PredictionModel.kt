@@ -49,7 +49,7 @@ data class InputBar(
 )
 
 enum class TargetType { NEXT_1M, AFTER_1H, KRX_CLOSE, NXT_END }
-enum class PredictionStatus { READY, INPUT_INCOMPLETE, STALE, TARGET_CLOSED, ACTUAL_DEFINITION_UNCONFIRMED }
+enum class PredictionStatus { READY, WARMING_UP, INPUT_INCOMPLETE, STALE, TARGET_CLOSED, ACTUAL_DEFINITION_UNCONFIRMED, MODEL_ERROR }
 
 data class PredictionRecord(
     val id: String,

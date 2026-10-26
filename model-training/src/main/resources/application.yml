@@ -1,0 +1,13 @@
+spring:
+  main:
+    web-application-type: none
+
+training:
+  command: none
+  environment: dev
+  data-dir: ./data
+  rest-url: https://openapivts.koreainvestment.com:29443
+  app-key: ${KIS_TRAINING_APP_KEY:}
+  app-secret: ${KIS_TRAINING_APP_SECRET:}
+  min-request-gap: 2s
+  max-pages-per-day: 20

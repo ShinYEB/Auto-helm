@@ -1,16 +1,18 @@
 # Auto-helm
 
-국내 주식의 매매 판단과 결과 검증을 위한 개인 프로젝트다. Gradle 멀티모듈에서 세 개의 Spring Boot 서비스를 독립 실행한다. `market-data`는 [Market Data LLD](docs/lld/01-market-data.md)의 관찰용 시세 수집을, `event-data`는 [Event Data LLD](docs/lld/03-event-data.md)의 공시·뉴스 후보 수집을 담당한다. `price-prediction`은 Redis Stream에서 봉을 받아 직전 종가 기준선을 기록한다. 주문, 학습 모델, AI 사건 분석, 모바일 API는 아직 연결하지 않았다.
+국내 주식의 매매 판단과 결과 검증을 위한 개인 프로젝트다. Gradle 멀티모듈에서 세 개의 상주 Spring Boot 서비스와 하나의 학습 배치를 독립 실행한다. `market-data`는 [Market Data LLD](docs/lld/01-market-data.md)의 관찰용 시세 수집을, `event-data`는 [Event Data LLD](docs/lld/03-event-data.md)의 공시·뉴스 후보 수집을 담당한다. `price-prediction`은 Redis Stream에서 봉을 받아 기준선 또는 승인된 경량 모델의 예측을 기록한다. 주문, AI 사건 분석, 모바일 API는 아직 연결하지 않았다.
 
 | 모듈 | 실행 단위 | 현재 책임 |
 | --- | --- | --- |
 | `market-data` | 독립 JAR·프로세스 | 한투 WebSocket 수신, KRX/NXT 1분봉, 로컬 기록 |
 | `event-data` | 독립 JAR·프로세스 | OpenDART 공시 원본, GDELT 뉴스 메타데이터 수집·중복 제거·로컬 기록 |
 | `price-prediction` | 독립 JAR·프로세스 | 확정 봉 Stream 소비, 1분·1시간 직전 종가 기준선과 사용 불가 상태 기록 |
+| `model-training` | 실행 후 종료되는 배치 JAR | 한투 과거 분봉 조회·원본 기록, 경량 모델 학습, 명시적 모델 승격 |
+| `model-contract` | 라이브러리 | 모델 묶음의 형식·해시 검증·적재 |
 
-학습용 과거 시세 수집·데이터셋 생성·모델 학습은 별도의 `model-training` 배치 서비스로 추가할 계획이다. 운영 중인 `price-prediction`은 승인된 모델 묶음만 읽어 추론한다. 두 서비스 사이에는 가중치와 전처리·특징 정의·버전·검증 결과가 포함된 변경 불가능한 모델 묶음을 전달한다. 학습 서비스와 모델 적재는 아직 구현되지 않았다.
+`model-training`은 가중치, 단일 특징 `logReturn1m`, 목표 정의, 데이터 해시, 시간순 검증 오차가 포함된 `ModelBundle.v1` 후보를 만든다. 운영 중인 `price-prediction`은 환경별로 승인된 묶음만 시작할 때 읽는다. 묶음이 없으면 기존 직전 종가 기준선을 사용한다. 첫 모델은 작은 선형 수익률 모델이며 상태 기반 신경망, 주간 거래 성과 평가와 자동 재학습은 아직 구현되지 않았다.
 
-세 서비스는 서로의 내부 클래스나 메모리를 호출하지 않는다. 파일도 `data/<환경>/market/`, `data/<환경>/events/`, `data/<환경>/prediction/`으로 나눈다. `journal-bridge`는 시세·사건 서비스가 공유하는 JSONL 완성 행 읽기와 체크포인트 코드이며 실행 프로세스가 아니다.
+상주 서비스와 학습 배치는 서로의 메모리를 호출하지 않는다. 파일도 `data/<환경>/market/`, `data/<환경>/events/`, `data/<환경>/prediction/`, `data/<환경>/historical/`로 나눈다. `journal-bridge`는 시세·사건 서비스가 공유하는 JSONL 완성 행 읽기와 체크포인트 코드이며 실행 프로세스가 아니다.
 
 확정 1분봉은 파일 기록 후 별도 작업자가 Redis Stream `autohelm:<환경>:market:minute-bars:v1`에 발행하고, 예측기가 소비자 그룹에서 받는다. 사건과 종목 연결은 별도 작업자가 [Redis 조회 캐시](docs/lld/03-event-data.md#redis-조회-캐시)에 투영한다. 세 경로 모두 기본값은 꺼져 있다. AI 분석 결과 캐시는 아직 구현 전이다. 파일 기록은 원본으로 유지한다.
 
@@ -75,6 +77,29 @@ prediction:
 ```
 
 예측기는 `READY` 봉에 대해 같은 장 구간 안의 다음 1분과 정확히 60분 뒤 종가를 직전 종가로 예측한다. 지연·결손·장 종료는 사용 불가 상태로 기록한다. KRX 공식 종가와 NXT 종료 가격은 출처와 확정 규칙이 정해질 때까지 `ACTUAL_DEFINITION_UNCONFIRMED`로 기록하며 가격을 만들지 않는다. 이 기준선은 매매 판단에 연결되지 않는다.
+
+### 과거 분봉 수집과 모델 배치
+
+`model-training`은 요청할 때만 실행하고 종료한다. 다음 예시는 **모의 환경의 읽기 전용 조회**다. 날짜·장 구간과 KRX/NXT 지원 범위를 계좌에서 먼저 확인한다. 학습에 쓰는 과거 봉은 실시간 `READY` 봉과 출처를 구분해 저장한다. 인증 정보는 저장소 밖의 환경 변수로만 전달한다.
+
+```bash
+export KIS_TRAINING_APP_KEY='...'
+export KIS_TRAINING_APP_SECRET='...'
+./gradlew :model-training:bootRun --args='--training.command=collect --training.environment=dev --training.symbol=005930 --training.venue=KRX --training.session=regular --training.from=2026-10-20 --training.to=2026-10-24 --training.start-time=09:00:00 --training.end-time=15:30:00'
+```
+
+배치는 한투의 `주식일별분봉조회` 응답을 날짜·시각으로 페이지 순회하며, 응답 원본과 정규화한 JSONL 봉, 완료 명세를 `data/dev/historical/`에 기록한다. 완료 명세와 체크섬이 맞는 날짜는 재요청하지 않는다. 날짜 중간에 실패하면 그 날짜의 원본 페이지는 남지만 다음 실행에서 **해당 날짜를 처음부터 다시 조회**한다. 제공처 접근 권한·과거 조회 범위·실제 페이지 크기는 계좌별 읽기 전용 시험이 필요하다. [한투 공식 조회 예제](https://github.com/koreainvestment/open-trading-api/blob/main/examples_llm/domestic_stock/inquire_time_dailychartprice/inquire_time_dailychartprice.py)를 기준으로 구현했고, 아직 실제 계좌 응답으로 검증하지 않았다.
+
+수집한 기간에 완료된 거래일이 3일 이상 있으면 후보를 학습한다. 마지막 20% 거래일을 검증에 쓰고, 같은 표본의 직전 종가 기준선 대비 **1분·1시간 가격 MAE가 각각 0.5% 이상 작을 때만** 승격 가능한 후보로 표시한다. 이 기준은 초기 기술 검증용이며 실전 수익 기준이 아니다.
+
+```bash
+./gradlew :model-training:bootRun --args='--training.command=fit --training.symbol=005930 --training.venue=KRX --training.session=regular --training.from=2026-10-20 --training.to=2026-10-24'
+./gradlew :model-training:bootRun --args='--training.command=promote --training.version=<후보-버전> --training.target-environment=dev'
+```
+
+후보는 `data/dev/training/bundles/<버전>/`에 생성된다. 승격 명령은 적격 후보를 `data/dev/models/bundles/`로 복사하고 `active.json`을 원자적으로 교체한다. 예측기를 통제된 시점에 재시작하면 묶음의 형식·해시를 검증해 적재한다. 적재 오류가 있으면 소비자를 시작하지 않는다. prd 승격은 dev에서 활성화된 **동일 해시**와 별도의 검증 증거 파일(`bundleSha256`, `devReplayPassed`, `mockTradingPassed`, `approvedAt`, `note`)이 필요하다. 그 증거를 실제 검증 없이 만들거나 prd 승격을 자동 실행하지 않는다.
+
+현재 테스트는 모의 HTTP 응답과 합성 거래일을 사용한다. 모델의 실제 시장 성능, 주간 피드백, 주문 성과와 비용은 아직 검증되지 않았다.
 
 ## 한투 시세 수신 설정
 
