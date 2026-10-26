@@ -31,7 +31,7 @@ data class GdeltProperties(
     val enabled: Boolean = false,
     val searches: Map<String, String> = emptyMap(),
     val endpoint: URI = URI.create("https://api.gdeltproject.org/api/v2/doc/doc"),
-    val pollInterval: Duration = Duration.ofMinutes(3),
+    val pollInterval: Duration = Duration.ofMinutes(5),
     val minRequestGap: Duration = Duration.ofSeconds(10),
 ) {
     init {

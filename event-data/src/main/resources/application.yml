@@ -12,7 +12,7 @@ events:
   gdelt:
     enabled: false
     searches: {}
-    poll-interval: 3m
+    poll-interval: 5m
     min-request-gap: 10s
   dart:
     enabled: false

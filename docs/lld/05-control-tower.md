@@ -35,7 +35,7 @@ flowchart LR
 | `PUT /api/symbols/{symbol}` | dev에서 종목명, KRX/NXT, 뉴스 검색어, DART 기업 고유번호를 등록·수정한다. 요청한 개정 번호가 현재 번호와 다르면 409를 반환한다. |
 | `DELETE /api/symbols/{symbol}?revision=N` | dev에서 종목을 비활성화한다. 과거 기록과 등록부 항목은 유지한다. |
 | `GET /api/models` | 검증된 후보·활성 모델의 오차와 과거 데이터 확보 기간을 조회한다. |
-| `GET /api/information` | DART/GDELT 수집 상태와 최근 사건 20건을 조회한다. |
+| `GET /api/information` | OpenDART·연합인포맥스 RSS·GDELT DOC 수집 상태, 최근 사건과 Jev/추가 검색 상태를 조회한다. RSS·점수 항목은 Event Data 구현 후 연결한다. |
 
 종목 등록부는 `data/<환경>/control/watchlist.json`에 원자적으로 교체하고 변경 이력을 `watchlist-audit.jsonl`에 기록한다. 수집기는 같은 환경의 등록부를 약 2초 간격으로 읽는다. 시세 시장 선택은 같은 종목의 YAML 기본값을 덮어쓰며 비활성 항목은 수집 대상에서 빠진다. 시세 수집기는 구독 목록이 바뀌면 WebSocket에 재연결해 적용한다. 새 종목·시장을 장중 추가한 경우 등록 후 **다음 온전한 분**부터 봉을 확정한다. 사건 수집기는 다음 폴링 반복에서 검색어·기업 고유번호를 갱신한다. 빈 검색어·기업 고유번호는 기존 YAML 값을 유지하며, 비활성 항목은 두 제공처의 대상에서 모두 빠진다. 이미 실행 중인 구버전 프로세스에는 새 동작이 적용되지 않으므로 새 코드로 계획된 재시작이 필요하다.
 
