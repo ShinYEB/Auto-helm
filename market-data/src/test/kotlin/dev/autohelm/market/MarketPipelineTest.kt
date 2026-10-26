@@ -1,6 +1,7 @@
 package dev.autohelm.market
 
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule
+import com.fasterxml.jackson.databind.node.ObjectNode
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
@@ -72,11 +73,47 @@ class MarketPipelineTest {
         assertThat(krx.open).isEqualTo(70_000)
         assertThat(krx.close).isEqualTo(70_200)
         assertThat(krx.volume).isEqualTo(6)
+        assertThat(listOf(krx.priceP25, krx.priceP50, krx.priceP75))
+            .containsExactly(70_000, 70_200, 70_200)
         assertThat(nxt.volume).isEqualTo(3)
+        assertThat(listOf(nxt.priceP25, nxt.priceP50, nxt.priceP75))
+            .containsExactly(70_100, 70_100, 70_100)
 
         engine.seal(start.plusSeconds(124))
         assertThat(published.filter { it.minuteStart == start.plusSeconds(60) })
-            .allMatch { it.quality == BarQuality.EMPTY_UNVERIFIED && it.close == null }
+            .allMatch { it.quality == BarQuality.EMPTY_UNVERIFIED && it.close == null &&
+                it.priceP25 == null && it.priceP50 == null && it.priceP75 == null }
+    }
+
+    @Test
+    fun `price quantiles weight each trade by executed volume`() {
+        val props = properties()
+        val journal = MarketJournal(props, jacksonObjectMapper().registerModule(JavaTimeModule()))
+        val engine = MarketEngine(props, journal)
+        engine.accept(frame("a", Venue.KRX, "100010", 100, 1))
+        engine.accept(frame("b", Venue.KRX, "100020", 110, 6))
+        engine.accept(frame("c", Venue.KRX, "100030", 120, 1))
+        engine.seal(start.plusSeconds(64))
+
+        val bar = journal.readBars(date).single { it.venue == Venue.KRX }
+        assertThat(listOf(bar.priceP25, bar.priceP50, bar.priceP75))
+            .containsExactly(110, 110, 110)
+    }
+
+    @Test
+    fun `older bars without price quantiles remain readable`() {
+        val props = properties()
+        val mapper = jacksonObjectMapper().registerModule(JavaTimeModule())
+        val journal = MarketJournal(props, mapper)
+        val engine = MarketEngine(props, journal)
+        engine.accept(frame("a", Venue.KRX, "100010", 100, 1))
+        engine.seal(start.plusSeconds(64))
+
+        val oldJson = mapper.valueToTree<ObjectNode>(journal.readBars(date).first { it.venue == Venue.KRX })
+        oldJson.remove(listOf("priceP25", "priceP50", "priceP75"))
+        val oldBar = mapper.treeToValue(oldJson, MinuteBar::class.java)
+        assertThat(listOf(oldBar.priceP25, oldBar.priceP50, oldBar.priceP75))
+            .containsExactly(null, null, null)
     }
 
     @Test

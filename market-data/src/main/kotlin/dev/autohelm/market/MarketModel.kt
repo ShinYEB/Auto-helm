@@ -55,6 +55,9 @@ data class MinuteBar(
     val sealedAt: Instant,
     val firstTickId: String?,
     val lastTickId: String?,
+    val priceP25: Long? = null,
+    val priceP50: Long? = null,
+    val priceP75: Long? = null,
 )
 
 data class MarketGap(

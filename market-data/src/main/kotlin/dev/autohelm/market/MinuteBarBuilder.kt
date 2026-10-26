@@ -70,6 +70,7 @@ class MinuteBarBuilder(
             ticks.isEmpty() -> BarQuality.EMPTY_UNVERIFIED
             else -> BarQuality.READY
         }
+        val (priceP25, priceP50, priceP75) = weightedPriceQuantiles(ticks)
         return MinuteBar(
             id = id, environment = properties.environment, symbol = key.symbol, venue = key.venue,
             session = key.session, minuteStart = key.minuteStart, minuteEnd = end,
@@ -77,6 +78,28 @@ class MinuteBarBuilder(
             low = ticks.minOfOrNull { it.price }, close = ticks.lastOrNull()?.price,
             volume = ticks.sumOf { it.volume }, tradeCount = ticks.size, quality = quality,
             sealedAt = now, firstTickId = ticks.firstOrNull()?.id, lastTickId = ticks.lastOrNull()?.id,
+            priceP25 = priceP25, priceP50 = priceP50, priceP75 = priceP75,
         )
+    }
+
+    /** Nearest-rank price quantiles; each trade contributes its executed volume. */
+    private fun weightedPriceQuantiles(ticks: List<MarketTick>): Triple<Long?, Long?, Long?> {
+        if (ticks.isEmpty()) return Triple(null, null, null)
+        val volume = ticks.sumOf { it.volume }
+        val p25Rank = volume / 4 + if (volume % 4 != 0L) 1 else 0
+        val p50Rank = volume / 2 + volume % 2
+        val p75Rank = volume - volume / 4
+        var cumulative = 0L
+        var p25: Long? = null
+        var p50: Long? = null
+        var p75: Long? = null
+        for (tick in ticks.sortedBy { it.price }) {
+            cumulative += tick.volume
+            if (p25 == null && cumulative >= p25Rank) p25 = tick.price
+            if (p50 == null && cumulative >= p50Rank) p50 = tick.price
+            if (p75 == null && cumulative >= p75Rank) p75 = tick.price
+            if (p75 != null) break
+        }
+        return Triple(p25, p50, p75)
     }
 }
