@@ -204,3 +204,8 @@ Redis 연결은 별도 임시 포트와 합성 데이터로 봉 발행 → 소�
 ## 모니터링
 
 오늘의 모의 시세 수집 테스트는 [Prometheus·Grafana 구성](monitoring/README.md)으로 관찰할 수 있다. 모니터링 프로세스는 수집 중인 JSONL과 상태 파일을 읽으며 한투 키를 사용하지 않는다.
+# 종목 검색 카탈로그
+
+컨트롤타워의 **종목 관리** 탭은 시가총액 상위 1,000개 기업을 기업명이나 종목코드로 검색합니다. 검색 결과를 선택하면 종목코드와 OpenDART 기업 고유번호가 등록 양식에 입력됩니다. 등록한 종목을 선택하면 시세 봉, 과거 데이터 확보 현황, 활성 모델, 학습 후보와 작업, 최근 사건을 볼 수 있습니다.
+
+카탈로그는 환경별 `data/<environment>/control/catalog.sqlite`에 저장합니다. [일별 시가총액 CSV](https://aikstockdata.com/downloads)와 [OpenDART 기업 고유번호](https://opendart.fss.or.kr/guide/detail.do?apiGrpCd=DS001&apiId=2019018)를 결합하며, DART 코드가 없는 우선주 등은 제외합니다. `DART_API_KEY`를 환경 변수로 설정한 다음 `python3 monitoring/import_stock_catalog.py --output data/dev/control/catalog.sqlite`를 실행하세요. 시가총액 자료의 기준일은 화면에 표시됩니다. 이 자료는 검색 편의용이며 매매 판단에 사용하지 않습니다. 갱신은 장 종료 후 필요할 때 실행합니다.

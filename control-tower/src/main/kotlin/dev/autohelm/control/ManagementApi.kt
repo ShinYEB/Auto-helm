@@ -15,7 +15,13 @@ import org.springframework.web.bind.annotation.RestController
 
 @RestController
 @RequestMapping("/api")
-class ManagementApi(private val watchlist: WatchlistStore, private val data: ConsoleData) {
+class ManagementApi(private val watchlist: WatchlistStore, private val data: ConsoleData,
+                    private val catalog: StockCatalog, private val details: SymbolDetails) {
+    @GetMapping("/catalog")
+    fun catalog(@RequestParam(defaultValue = "") q: String): CatalogResult = catalog.search(q)
+
+    @GetMapping("/symbols/{symbol}/details")
+    fun details(@PathVariable symbol: String): SymbolDetailsSnapshot = details.snapshot(symbol)
     @GetMapping("/symbols")
     fun symbols(): WatchlistSnapshot = watchlist.current()
 

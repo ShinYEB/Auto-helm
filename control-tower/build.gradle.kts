@@ -14,6 +14,7 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-json")
     implementation("com.fasterxml.jackson.module:jackson-module-kotlin")
     implementation("org.jetbrains.kotlin:kotlin-reflect")
+    implementation("org.xerial:sqlite-jdbc:3.53.4.0")
     testImplementation("org.springframework.boot:spring-boot-starter-test")
 }
 
