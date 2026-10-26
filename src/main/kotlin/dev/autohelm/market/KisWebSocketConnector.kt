@@ -69,7 +69,8 @@ class KisWebSocketConnector(
                 listener.closed.join()
             } catch (ex: Exception) {
                 if (running) log.warn("KIS WebSocket connection failed: {}", ex.message)
-                key = null
+                // Keep the issued approval key across transient socket failures.
+                // The market-day collector runs for less than its 24-hour validity.
             } finally {
                 socket = null
                 worker.connectionLost(Instant.now())
