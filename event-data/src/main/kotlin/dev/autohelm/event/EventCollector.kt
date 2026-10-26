@@ -71,7 +71,7 @@ class EventCollector(
         nextGdelt[symbol] = now.plus(properties.gdelt.pollInterval)
         health.attempt(EventSource.GDELT)
         try {
-            val result = gdelt.fetch(symbol, keyword, now)
+            val result = gdelt.fetch(symbol, keyword)
             val discovered = save(result)
             gdeltBackoff = Duration.ofMinutes(1)
             health.success(EventSource.GDELT, discovered)
@@ -104,7 +104,7 @@ class EventCollector(
                         seen += record.id
                         discovered++
                     }
-                    saveLink(candidate.id, symbol, now)
+                    saveLink(candidate.id, symbol, candidate.firstSeenAt)
                 }
             }
             health.success(EventSource.DART, discovered)

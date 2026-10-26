@@ -21,11 +21,12 @@ class GdeltAdapter(
 ) {
     private val dateFormat = DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmss'Z'")
 
-    fun fetch(symbol: String, keyword: String, now: Instant): FetchResult {
+    fun fetch(symbol: String, keyword: String): FetchResult {
         val query = URLEncoder.encode(keyword, StandardCharsets.UTF_8)
         val uri = URI.create("${properties.gdelt.endpoint}?query=$query&mode=artlist&format=json&sort=datedesc&maxrecords=100&timespan=1h")
         val request = HttpRequest.newBuilder(uri).timeout(Duration.ofSeconds(25)).GET().build()
         val response = client.send(request, HttpResponse.BodyHandlers.ofString())
+        val receivedAt = Instant.now()
         if (response.statusCode() == 429) throw RateLimitedException(response.headers().firstValue("Retry-After").orElse(null))
         check(response.statusCode() == 200) { "GDELT HTTP ${response.statusCode()}" }
         val records = mapper.readTree(response.body()).path("articles").mapNotNull { article ->
@@ -39,11 +40,11 @@ class GdeltAdapter(
             EventRecord(
                 id = "GDELT:${sha256(url)}", environment = properties.environment,
                 source = EventSource.GDELT, title = title, url = url, symbol = null,
-                publishedAt = null, providerSeenAt = providerSeen, firstSeenAt = now,
+                publishedAt = null, providerSeenAt = providerSeen, firstSeenAt = receivedAt,
                 inputScope = "METADATA_ONLY",
             )
         }
-        return FetchResult(EventSource.GDELT, symbol, now, response.statusCode(), response.body(), records)
+        return FetchResult(EventSource.GDELT, symbol, receivedAt, response.statusCode(), response.body(), records)
     }
 
     private fun normalizeUrl(value: String): String? = runCatching {

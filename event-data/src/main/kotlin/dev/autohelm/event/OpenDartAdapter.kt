@@ -30,11 +30,12 @@ class OpenDartAdapter(
             val query = "crtfc_key=${encode(properties.dart.apiKey)}&corp_code=$corpCode" +
                 "&bgn_de=$from&end_de=$to&page_no=$page&page_count=100&last_reprt_at=N"
             val response = client.send(request("list.json?$query"), HttpResponse.BodyHandlers.ofString())
+            val receivedAt = Instant.now()
             check(response.statusCode() == 200) { "OpenDART HTTP ${response.statusCode()}" }
             val body = mapper.readTree(response.body())
             when (val status = body.path("status").asText()) {
                 "000" -> Unit
-                "013" -> return results + FetchResult(EventSource.DART, symbol, now, 200, response.body(), emptyList())
+                "013" -> return results + FetchResult(EventSource.DART, symbol, receivedAt, 200, response.body(), emptyList())
                 "020" -> throw RateLimitedException()
                 else -> error("OpenDART status $status")
             }
@@ -46,11 +47,11 @@ class OpenDartAdapter(
                     id = "DART:$receipt", environment = properties.environment,
                     source = EventSource.DART, title = title,
                     url = "https://dart.fss.or.kr/dsaf001/main.do?rcpNo=$receipt",
-                    symbol = symbol, publishedAt = null, providerSeenAt = null, firstSeenAt = now,
+                    symbol = symbol, publishedAt = null, providerSeenAt = null, firstSeenAt = receivedAt,
                     inputScope = "FULL_DISCLOSURE", // AI input is gated separately by usage rights.
                 )
             }
-            results += FetchResult(EventSource.DART, symbol, now, 200, response.body(), records)
+            results += FetchResult(EventSource.DART, symbol, receivedAt, 200, response.body(), records)
             val totalPages = body.path("total_page").asInt(1).coerceAtLeast(1)
             if (page >= totalPages) break
             page++

@@ -35,13 +35,16 @@ class EventAdaptersTest {
                 enabled = true, searches = mapOf("005930" to "삼성전자"),
                 endpoint = URI.create("http://127.0.0.1:${server.address.port}/doc"),
             ))
-            val result = GdeltAdapter(properties, mapper).fetch("005930", "삼성전자", Instant.parse("2026-10-26T09:01:00Z"))
+            val startedAt = Instant.now()
+            val result = GdeltAdapter(properties, mapper).fetch("005930", "삼성전자")
             assertEquals(1, result.records.size)
             val record = result.records.single()
             assertEquals("https://news.example/a?id=7", record.url)
             assertEquals("METADATA_ONLY", record.inputScope)
             assertNull(record.publishedAt)
             assertEquals(Instant.parse("2026-10-26T09:00:00Z"), record.providerSeenAt)
+            assertEquals(result.receivedAt, record.firstSeenAt)
+            assertTrue(!result.receivedAt.isBefore(startedAt))
             assertEquals("005930", result.query)
         } finally { server.stop(0) }
     }
@@ -70,6 +73,7 @@ class EventAdaptersTest {
             val adapter = OpenDartAdapter(properties, mapper)
             val pages = adapter.fetch("005930", "00126380", Instant.parse("2026-10-26T09:01:00Z"))
             assertEquals(2, pages.size)
+            assertTrue(pages.all { page -> page.records.all { it.firstSeenAt == page.receivedAt } })
             assertEquals(listOf("DART:20261026000001", "DART:20261026000002"), pages.flatMap { it.records }.map { it.id })
             assertFalse(pages.first().body.contains("test-only"))
             assertEquals('P'.code.toByte(), adapter.downloadDisclosure("20261026000001").first())
