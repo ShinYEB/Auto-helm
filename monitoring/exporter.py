@@ -79,11 +79,15 @@ class Metrics:
         self.last_ready_bar = {"KRX": 0.0, "NXT": 0.0}
         self.gaps = Counter()
         self.log_errors = Counter()
+        self.incidents = Counter()
+        self.event_failures = Counter()
         base = DATA_ROOT / "market"
         self.tails = [
             Tail(base / "raw" / f"{date}.jsonl", self.raw),
             Tail(base / "bars" / f"{date}.jsonl", self.bar),
             Tail(base / "gaps" / f"{date}.jsonl", self.gap),
+            Tail(DATA_ROOT / "operations/incidents" / f"{date}.jsonl", self.incident),
+            Tail(DATA_ROOT / "events/health-events" / f"{date}.jsonl", self.event_failure),
         ]
         self.log_offset = 0
 
@@ -102,6 +106,12 @@ class Metrics:
 
     def gap(self, row):
         self.gaps[row["reason"]] += 1
+
+    def incident(self, row):
+        self.incidents[row["service"], row["kind"]] += 1
+
+    def event_failure(self, row):
+        self.event_failures[row["source"], row["kind"]] += 1
 
     def update_log(self):
         path = DATA_ROOT / f"market-day-{self.date}.log"
@@ -165,7 +175,12 @@ class Metrics:
             sample("autohelm_collector_up", up),
             sample("autohelm_supervisor_heartbeat_timestamp_seconds", heartbeat),
             sample("autohelm_collector_restarts_total", restart_total),
+            sample("autohelm_unresolved_alerts", len(status.get("alerts", []))),
         ]
+        for (service, kind), count in self.incidents.items():
+            lines.append(sample("autohelm_incidents_total", count, {"service": service, "kind": kind}))
+        for (source, kind), count in self.event_failures.items():
+            lines.append(sample("autohelm_event_failures_total", count, {"source": source, "kind": kind}))
         for venue in ("KRX", "NXT"):
             labels = {"venue": venue}
             lines += [

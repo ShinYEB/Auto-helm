@@ -29,6 +29,8 @@ python3 monitoring/collection_launchd.py uninstall
 
 당일 상태는 `data/dev/market-day-YYYY-MM-DD.status.json`, 실행 로그는 `data/dev/market-day-YYYY-MM-DD.log` 및 `data/dev/collection-window/`에 남는다. 20:30 종료 뒤 `market-day-YYYY-MM-DD.report.json`에 KRX/NXT 수신 프레임, 봉 품질, 결손, 연결·파싱 오류, 재시작 및 자동 종료 여부를 기록한다. [Grafana 시세](http://127.0.0.1:3000/d/autohelm-market-day/auto-helm-market-data)와 [사건](http://127.0.0.1:3000/d/autohelm-event-data/auto-helm-event-data) 대시보드로 관찰한다. Mac을 전원에 연결하고 로그인 세션이 유지돼야 예약 작업이 동작한다.
 
+복구 판단은 프로세스 종료 외에 하트비트·구독 확인·체결·봉·예측 출력 지연을 사용한다. 재시작 횟수에는 한도를 둔다. 오류·복구 이력은 `data/dev/operations/incidents/YYYY-MM-DD.jsonl`, 제공처 실패는 `data/dev/events/health-events/YYYY-MM-DD.jsonl`에 **추가만** 한다. 상태 JSON은 현재값으로 교체하지만 과거 오류 기록은 지우지 않는다. 마감 보고서는 한 번만 발행한다. 임계값과 검토 절차는 [복구·관측 LLD](../docs/lld/06-recovery-observability.md)에 정리했다.
+
 ## 사건 수집기 단독 실행
 
 `event-data`는 실행 중 내부 스케줄러로 종목별 OpenDART를 15분, GDELT 검색어와 연합인포맥스 RSS 피드를 각각 5분마다 조회한다. 10/27~30 시험에서는 위 감독 프로세스가 실행 시간을 제한한다. GDELT 전체 요청은 최소 10초 간격이며, 429가 오면 대기 시간을 늘린다.
@@ -46,7 +48,7 @@ python3 monitoring/event_service.py stop
 
 ## 컨트롤타워
 
-컨트롤타워는 별도 감독 프로세스로 실행한다. `python3 monitoring/control_service.py start|status|stop`으로 관리한다. 로컬 전용 화면은 토큰 없이 열린다. `monitoring/native.py`와 `event_service.py`의 시작·종료는 서로 독립적이다.
+컨트롤타워는 별도 감독 프로세스로 실행한다. 수집 시험의 설치 명령은 해당 감독 프로세스도 `launchd`에 등록한다. 로컬 전용 화면은 토큰 없이 열린다. `monitoring/native.py`와 `event_service.py`의 시작·종료는 서로 독립적이다.
 
 ## Docker Compose
 

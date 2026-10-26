@@ -9,9 +9,12 @@ import time
 import urllib.request
 from pathlib import Path
 
+from incidents import append_incident
+
 
 REPO = Path(__file__).resolve().parent.parent
 ROOT = REPO / "data/dev/control/runtime"
+DATA = REPO / "data/dev"
 STATE = ROOT / "supervisor.json"
 LOG = ROOT / "control-tower.log"
 JAR = REPO / "control-tower/build/libs/control-tower-0.1.0-SNAPSHOT.jar"
@@ -58,6 +61,7 @@ def process_env():
 
 def run():
     env = process_env()
+    append_incident(DATA, "control-supervisor", "SUPERVISOR_STARTED", detail={"pid": os.getpid()})
     stopping = False
     child = None
     restarts = 0
@@ -75,12 +79,14 @@ def run():
             while not stopping:
                 child = subprocess.Popen(["java", "-jar", str(JAR)], cwd=REPO, env=env,
                                          stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT)
+                append_incident(DATA, "control", "PROCESS_STARTED", detail={"pid": child.pid})
                 write_state(state="running", server_pid=child.pid, restarts=restarts)
                 while child.poll() is None and not stopping:
                     time.sleep(1)
                 if stopping:
                     break
                 restarts += 1
+                append_incident(DATA, "control", "PROCESS_EXITED", detail={"pid": child.pid, "exitCode": child.returncode})
                 write_state(state="restarting", server_pid=None, restarts=restarts)
                 time.sleep(10)
         finally:
@@ -92,6 +98,7 @@ def run():
                     child.kill()
                     child.wait()
             write_state(state="stopped", server_pid=None, restarts=restarts)
+            append_incident(DATA, "control-supervisor", "SUPERVISOR_STOPPED", detail={"pid": os.getpid()})
 
 
 def start():

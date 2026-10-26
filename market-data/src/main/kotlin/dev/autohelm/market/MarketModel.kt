@@ -15,6 +15,7 @@ data class MarketHealth(
     val gapStartedAt: Instant?,
     val reason: String?,
     val updatedAt: Instant,
+    val subscriptionConfirmedAt: Instant? = null,
 )
 
 data class RawFrame(

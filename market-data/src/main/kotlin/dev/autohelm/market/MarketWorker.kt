@@ -21,9 +21,18 @@ class MarketWorker(
     private val log = LoggerFactory.getLogger(javaClass)
     private val clock = Clock.systemUTC()
     private val health = MarketHealthTracker(properties, managedSymbols::current)
+    private val healthFile = MarketHealthFile(properties, mapper)
+    @Volatile private var firstBarAt: Instant? = null
+    @Volatile private var lastBarAt: Instant? = null
+    @Volatile private var lastReadyBarAt: Instant? = null
     private val engine = MarketEngine(properties, MarketJournal(properties, mapper), managedSymbols::current,
         activeFrom = managedSymbols::activeFrom,
-        onBar = { publisher.publishEvent(it) }, onTick = health::received)
+        onBar = {
+            if (firstBarAt == null) firstBarAt = it.sealedAt
+            lastBarAt = it.sealedAt
+            if (it.quality == BarQuality.READY) lastReadyBarAt = it.sealedAt
+            publisher.publishEvent(it)
+        }, onTick = health::received)
     private val queue = ArrayBlockingQueue<RawFrame>(properties.queueCapacity)
     private val overflowStarted = AtomicReference<Instant?>(null)
     private val disconnectedAt = AtomicReference<Instant?>(null)
@@ -65,6 +74,7 @@ class MarketWorker(
     fun healthSnapshot(): List<MarketHealth> = health.snapshot(clock.instant())
 
     private fun runLoop() {
+        var lastHealthWrite = Instant.EPOCH
         while (running || queue.isNotEmpty()) {
             try {
                 val frame = queue.poll(500, TimeUnit.MILLISECONDS)
@@ -73,6 +83,11 @@ class MarketWorker(
                 if (gapStart != null) engine.markGap(gapStart, clock.instant(), "QUEUE_OVERFLOW")
                 if (frame != null) engine.accept(frame)
                 if (disconnectedAt.get() == null) engine.seal(clock.instant())
+                val now = clock.instant()
+                if (now.isAfter(lastHealthWrite.plusSeconds(5))) {
+                    lastHealthWrite = now
+                    healthFile.write(now, health.snapshot(now), firstBarAt, lastBarAt, lastReadyBarAt)
+                }
             } catch (ex: InterruptedException) {
                 if (!running && queue.isEmpty()) break
             } catch (ex: Exception) {

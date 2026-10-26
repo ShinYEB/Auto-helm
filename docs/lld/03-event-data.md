@@ -10,6 +10,8 @@
 
 사건 수집기와 분석기는 시세 WebSocket 및 매분 가격 예측과 독립적으로 실행한다.
 
+제공처의 실패·429·RSS 목록 포화 의심은 현재 상태 파일 외에 날짜별 추가 전용 기록으로 남긴다. 상태가 성공으로 바뀌어도 이전 실패는 보존한다. [복구·관측 LLD](06-recovery-observability.md)
+
 ```mermaid
 flowchart LR
     RSS["연합인포맥스 RSS"] --> COLLECT["1. 수집"]

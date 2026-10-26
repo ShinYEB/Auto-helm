@@ -4,6 +4,7 @@ import unittest
 from datetime import datetime
 from pathlib import Path
 from unittest.mock import patch
+from unittest.mock import Mock
 from zoneinfo import ZoneInfo
 
 import collection_window as window
@@ -40,6 +41,24 @@ class CollectionWindowTest(unittest.TestCase):
             self.assertEqual(report["gaps"], {"DISCONNECTED": 1})
             self.assertEqual(report["jsonParseErrors"], 1)
             self.assertTrue(report["automaticStop"])
+
+    def test_orphan_cleanup_ignores_pid_without_expected_jar(self):
+        with tempfile.TemporaryDirectory() as directory:
+            runtime = Path(directory)
+            (runtime / "status.json").write_text(json.dumps({"processes": {"market": 123}}))
+            with patch.object(window, "RUNTIME", runtime), \
+                 patch.object(window.subprocess, "run", return_value=Mock(returncode=0, stdout="unrelated process")), \
+                 patch.object(window.os, "killpg") as kill:
+                window.cleanup_orphans()
+            kill.assert_not_called()
+
+    def test_daily_report_cannot_overwrite_existing_report(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "report.json"
+            window.write_once_json(path, {"error": "first"})
+            with self.assertRaises(FileExistsError):
+                window.write_once_json(path, {"error": "second"})
+            self.assertEqual(json.loads(path.read_text()), {"error": "first"})
 
 
 if __name__ == "__main__":

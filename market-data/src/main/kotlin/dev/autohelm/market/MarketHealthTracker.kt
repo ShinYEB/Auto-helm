@@ -20,7 +20,8 @@ class MarketHealthTracker(
     fun confirmed(symbol: String, venue: Venue, at: Instant) {
         val key = symbol to venue
         val current = states[key] ?: initial(symbol, venue, at)
-        states[key] = current.copy(subscriptionState = SubscriptionState.SUBSCRIBED, reason = null, updatedAt = at)
+        states[key] = current.copy(subscriptionState = SubscriptionState.SUBSCRIBED, reason = null,
+            updatedAt = at, subscriptionConfirmedAt = at)
     }
 
     @Synchronized

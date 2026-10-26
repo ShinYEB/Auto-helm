@@ -4,12 +4,19 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import org.slf4j.LoggerFactory
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
+import java.nio.ByteBuffer
+import java.nio.channels.FileChannel
+import java.nio.file.StandardOpenOption
 import java.time.Instant
+import java.time.ZoneId
+import java.util.UUID
 
 /** A small atomic status file for the read-only monitoring exporter. */
 class EventHealth(private val properties: EventProperties, private val mapper: ObjectMapper) {
     private val log = LoggerFactory.getLogger(javaClass)
     private val path = properties.dataDir.resolve(properties.environment).resolve("events/health.json")
+    private val failureRoot = properties.dataDir.resolve(properties.environment).resolve("events/health-events")
+    private val seoul = ZoneId.of("Asia/Seoul")
     private val sources = mutableMapOf(
         EventSource.DART to SourceHealth(properties.dart.enabled),
         EventSource.GDELT to SourceHealth(properties.gdelt.enabled),
@@ -51,6 +58,7 @@ class EventHealth(private val properties: EventProperties, private val mapper: O
         state.failures++
         if (kind == "RATE_LIMITED") state.rateLimits++
         state.lastResult = kind
+        appendFailure(source.name, kind, state.failures)
         write()
     }
 
@@ -61,7 +69,23 @@ class EventHealth(private val properties: EventProperties, private val mapper: O
         state.lastNewCount = discovered
         state.lastSuccessAt = Instant.now()
         if (possibleGap) state.possibleGaps++
+        if (possibleGap) appendFailure("EINFOMAX:$feed", "POSSIBLE_FEED_GAP", state.possibleGaps)
         write()
+    }
+
+    private fun appendFailure(source: String, kind: String, count: Long) {
+        val at = Instant.now()
+        val path = failureRoot.resolve("${at.atZone(seoul).toLocalDate()}.jsonl")
+        Files.createDirectories(path.parent)
+        val row = mapper.writeValueAsString(mapOf(
+            "id" to UUID.randomUUID().toString(), "at" to at.toString(),
+            "source" to source, "kind" to kind, "count" to count,
+        )) + "\n"
+        FileChannel.open(path, StandardOpenOption.CREATE, StandardOpenOption.WRITE, StandardOpenOption.APPEND).use { channel ->
+            val buffer = ByteBuffer.wrap(row.toByteArray(Charsets.UTF_8))
+            while (buffer.hasRemaining()) channel.write(buffer)
+            channel.force(true)
+        }
     }
 
     private fun write() {
