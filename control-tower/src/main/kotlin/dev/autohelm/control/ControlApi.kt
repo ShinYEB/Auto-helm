@@ -23,9 +23,14 @@ class ControlApi(
     private val properties: ControlProperties,
     private val status: ServiceStatus,
     private val jobs: TrainingJobs,
+    private val dashboard: DashboardMetrics,
 ) {
     @GetMapping("/snapshot")
     fun snapshot() = ControlSnapshot(properties.environment, Instant.now(), status.snapshot(), jobs.list())
+
+    @GetMapping("/dashboard")
+    fun dashboard(@org.springframework.web.bind.annotation.RequestParam(defaultValue = "6h") range: String) =
+        dashboard.snapshot(range)
 
     @PostMapping("/training/jobs")
     fun start(@RequestBody request: TrainingJobRequest): ResponseEntity<TrainingJob> =

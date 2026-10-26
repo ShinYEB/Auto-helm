@@ -6,7 +6,7 @@
 
 ## 경계
 
-브라우저는 `control-tower`가 제공하는 정적 웹 화면과 `/api/*`만 호출한다. `market-data`, `event-data`, `price-prediction`, `model-training`에 브라우저가 직접 연결하지 않는다. 컨트롤타워는 환경별 로컬 상태 기록을 읽고, 제한된 요청만 `model-training` 자식 프로세스로 전달한다. 서비스 간 실시간 데이터 전달(Redis Stream)은 이 관리 경로와 독립적이다.
+브라우저는 `control-tower`가 제공하는 정적 웹 화면과 `/api/*`만 호출한다. `market-data`, `event-data`, `price-prediction`, `model-training`, Prometheus, Grafana에 브라우저가 직접 연결하지 않는다. 컨트롤타워는 환경별 로컬 상태 기록과 Prometheus의 정해진 지표를 읽고, 제한된 요청만 `model-training` 자식 프로세스로 전달한다. 서비스 간 실시간 데이터 전달(Redis Stream)은 이 관리 경로와 독립적이다.
 
 ```mermaid
 flowchart LR
@@ -14,6 +14,7 @@ flowchart LR
     CT -->|"상태 파일 조회"| MARKET["market-data 기록"]
     CT -->|"상태 파일 조회"| EVENT["event-data 기록"]
     CT -->|"예측 기록 조회"| PRED["price-prediction 기록"]
+    CT -->|"고정된 지표 조회"| PROM["로컬 Prometheus"]
     CT -->|"검증한 명령으로 자식 프로세스 실행"| TRAIN["model-training 배치"]
     TRAIN -->|"작업 결과"| JOB["환경별 작업 상태 파일"]
 ```
@@ -25,7 +26,10 @@ flowchart LR
 | 경로 | 동작 |
 | --- | --- |
 | `GET /api/snapshot` | 현재 환경의 서비스 관측값과 최근 학습 작업 20건을 반환한다. 상태 파일의 시각·PID를 확인하며 오래된 기록을 실행 중으로 표시하지 않는다. |
+| `GET /api/dashboard?range=1h\|6h\|24h` | Grafana와 같은 시세·사건 지표의 상태값과 시계열을 반환한다. PromQL은 서버의 고정 목록에서만 사용한다. |
 | `POST /api/training/jobs` | dev에서 `collect`, `fit`, `promote-dev` 중 하나를 실행한다. 종목·시장·날짜·버전 형식을 검사하고 한 번에 한 작업만 허용한다. |
+
+웹 대시보드는 시세 수집기 실행·재시작·KRX/NXT 장중 지연, 사건 수집기 실행·DART 마지막 성공·발견·실패를 상태 카드로 보여준다. 시계열은 시장별 프레임/초, 봉 품질, 결손, 오류, 제공처별 조회, 새 사건과 제한 응답이다. 범위는 최근 1·6·24시간 중 선택하며 15초마다 새로 조회한다. Prometheus가 닿지 않으면 지표를 0으로 바꾸지 않고 사용 불가로 표시한다. Grafana는 상세 탐색용으로 계속 사용할 수 있다. 로컬 Prometheus 주소는 `control.prometheus-url`로 설정하며 루프백 HTTP만 허용한다.
 
 상태 조회는 기록 기반이다. 사건 수집기는 `health.json`의 PID와 갱신 시각으로 실행 여부를 확인한다. 시세는 당일 감독 상태 파일을 읽고, 예측기는 당일 출력 파일의 최근 수정 시각을 표시한다. 시세·예측의 기록이 있다고 프로세스가 실행 중이라고 단정하지 않는다. 향후 각 서비스가 내부 관리 인터페이스를 제공하면 컨트롤타워의 어댑터에서만 연결하고, 브라우저용 서비스 주소는 공개하지 않는다.
 

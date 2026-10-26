@@ -42,7 +42,7 @@
 ./gradlew :control-tower:bootRun
 ```
 
-컨트롤타워는 기본적으로 로컬에서만 수신하며 API 요청마다 `X-Control-Token`을 검증한다. 화면에서 dev 과거 분봉 수집·모델 학습·dev 승격을 실행할 수 있다. prd 승격과 주문은 제공하지 않는다. `GET /api/snapshot`의 시세·예측 상태는 출력 기록을 통한 관측이며 프로세스 생존 확인과 구별된다. [컨트롤타워 설계](docs/lld/05-control-tower.md)에 API와 장애 동작을 기록했다.
+컨트롤타워는 기본적으로 로컬에서만 수신하며 API 요청마다 `X-Control-Token`을 검증한다. 화면에는 기존 Grafana의 시세·사건 핵심 지표를 상태 카드와 1·6·24시간 차트로 표시한다. 컨트롤타워만 로컬 Prometheus(`127.0.0.1:9090`)에 접속하며, Prometheus가 중단되면 대시보드에 사용 불가 상태를 표시한다. 화면에서 dev 과거 분봉 수집·모델 학습·dev 승격도 실행할 수 있다. prd 승격과 주문은 제공하지 않는다. `GET /api/snapshot`의 시세·예측 상태는 출력 기록을 통한 관측이며 프로세스 생존 확인과 구별된다. [컨트롤타워 설계](docs/lld/05-control-tower.md)에 API와 장애 동작을 기록했다.
 
 ### Redis 연결
 

@@ -19,6 +19,16 @@
     th, td { text-align: left; padding: 10px; border-bottom: 1px solid #35505e; }
     th { color: #aac0ca; } .muted { color: #aac0ca; } .error { color: #ff9e9e; }
     #message { min-height: 1.4em; } code { color: #a6ecf5; }
+    .metric-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(155px, 1fr)); gap: 10px; }
+    .metric { background: #10212b; border: 1px solid #35505e; border-radius: 9px; padding: 14px; }
+    .metric strong { display: block; font-size: 1.5rem; margin: 8px 0 4px; }
+    .metric small { color: #9eb5c0; }
+    .chart-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: 12px; margin-top: 14px; }
+    .chart { background: #10212b; border: 1px solid #35505e; border-radius: 9px; padding: 14px; min-width: 0; }
+    .chart h3 { margin: 0 0 8px; font-size: 1rem; }
+    .chart svg { display: block; width: 100%; height: 210px; }
+    .legend { display: flex; flex-wrap: wrap; gap: 6px 12px; color: #b7cbd4; font-size: .78rem; }
+    .legend span::before { content: '●'; color: var(--series-color); padding-right: 4px; }
   </style>
 </head>
 <body>
@@ -30,6 +40,15 @@
       <button id="connect">연결</button>
     </div>
     <p id="message" class="muted">토큰은 현재 탭의 메모리에만 보관합니다.</p>
+  </section>
+  <section>
+    <div class="row">
+      <h2 style="margin:0;flex:1">운영 대시보드</h2>
+      <label>조회 기간 <select id="range"><option value="1h">최근 1시간</option><option value="6h" selected>최근 6시간</option><option value="24h">최근 24시간</option></select></label>
+    </div>
+    <p id="dashboardState" class="muted">컨트롤타워 연결 후 Prometheus 지표를 표시합니다.</p>
+    <div id="metrics" class="metric-grid"></div>
+    <div id="charts" class="chart-grid"></div>
   </section>
   <section>
     <h2>서비스 관측</h2>
@@ -57,6 +76,7 @@
   </section>
   <script>
     let token = '';
+    let dashboardRequest = 0;
     const $ = id => document.getElementById(id);
     const message = (value, error = false) => { $('message').textContent = value; $('message').className = error ? 'error' : 'muted'; };
     const cell = (row, value) => { const td = document.createElement('td'); td.textContent = value ?? '—'; row.appendChild(td); };
@@ -64,6 +84,74 @@
       const body = $(id); body.replaceChildren();
       for (const item of rows) { const tr = document.createElement('tr'); values(item).forEach(value => cell(tr, value)); body.appendChild(tr); }
     };
+    const svgNode = (tag, attributes = {}) => {
+      const node = document.createElementNS('http://www.w3.org/2000/svg', tag);
+      for (const [key, value] of Object.entries(attributes)) node.setAttribute(key, value);
+      return node;
+    };
+    const colors = ['#4bd2eb', '#f9bb67', '#82d89a', '#d4a4f8', '#ff8794', '#a7bcff', '#e4d575'];
+    const number = value => Number(value).toLocaleString('ko-KR', { maximumFractionDigits: 1 });
+    const statValue = stat => {
+      if (stat.value == null) return '데이터 없음';
+      if (stat.unit === 'boolean') return stat.value === 1 ? '실행 중' : '중단';
+      if (stat.unit === 'seconds') return stat.value >= 3600 ? `${number(stat.value / 3600)}시간` :
+        stat.value >= 60 ? `${number(stat.value / 60)}분` : `${number(stat.value)}초`;
+      return number(stat.value);
+    };
+    function renderStats(stats) {
+      const grid = $('metrics'); grid.replaceChildren();
+      for (const stat of stats) {
+        const card = document.createElement('div'); card.className = 'metric';
+        const label = document.createElement('div'); label.textContent = stat.title;
+        const value = document.createElement('strong'); value.textContent = statValue(stat);
+        const at = document.createElement('small'); at.textContent = stat.sampledAt ? `관측 ${new Date(stat.sampledAt).toLocaleTimeString('ko-KR')}` : '관측값 없음';
+        card.append(label, value, at); grid.appendChild(card);
+      }
+    }
+    function renderChart(chart) {
+      const card = document.createElement('div'); card.className = 'chart';
+      const title = document.createElement('h3'); title.textContent = chart.title; card.appendChild(title);
+      const series = chart.series.filter(item => item.points.length);
+      if (!series.length) { const empty = document.createElement('p'); empty.className = 'muted'; empty.textContent = '선택한 기간에 데이터가 없습니다.'; card.appendChild(empty); return card; }
+      const all = series.flatMap(item => item.points);
+      const first = Math.min(...all.map(point => Date.parse(point.at)));
+      const last = Math.max(...all.map(point => Date.parse(point.at)));
+      const min = Math.min(0, ...all.map(point => point.value));
+      const max = Math.max(1, ...all.map(point => point.value));
+      const svg = svgNode('svg', { viewBox: '0 0 600 210', role: 'img', 'aria-label': chart.title });
+      const x = time => 54 + (Date.parse(time) - first) / Math.max(1, last - first) * 532;
+      const y = value => 170 - (value - min) / Math.max(0.000001, max - min) * 145;
+      for (let i = 0; i <= 3; i++) {
+        const level = min + (max - min) * i / 3;
+        svg.appendChild(svgNode('line', { x1: 54, x2: 586, y1: y(level), y2: y(level), stroke: '#34505c', 'stroke-width': 1 }));
+        const label = svgNode('text', { x: 47, y: y(level) + 4, fill: '#9eb5c0', 'text-anchor': 'end', 'font-size': 11 });
+        label.textContent = number(level); svg.appendChild(label);
+      }
+      for (const [index, item] of series.entries()) {
+        const points = item.points.map(point => `${x(point.at).toFixed(1)},${y(point.value).toFixed(1)}`).join(' ');
+        svg.appendChild(svgNode('polyline', { points, fill: 'none', stroke: colors[index % colors.length], 'stroke-width': 2.2, 'stroke-linejoin': 'round' }));
+      }
+      for (const [time, position, anchor] of [[first, 54, 'start'], [last, 586, 'end']]) {
+        const label = svgNode('text', { x: position, y: 198, fill: '#9eb5c0', 'text-anchor': anchor, 'font-size': 11 });
+        label.textContent = new Date(time).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }); svg.appendChild(label);
+      }
+      card.appendChild(svg);
+      const legend = document.createElement('div'); legend.className = 'legend';
+      series.forEach((item, index) => { const marker = document.createElement('span'); marker.style.setProperty('--series-color', colors[index % colors.length]); marker.textContent = item.label; legend.appendChild(marker); });
+      card.appendChild(legend); return card;
+    }
+    async function refreshDashboard() {
+      if (!token) return;
+      const requestId = ++dashboardRequest;
+      try {
+        const data = await api(`/api/dashboard?range=${$('range').value}`);
+        if (requestId !== dashboardRequest) return;
+        if (!data.available) { $('dashboardState').textContent = 'Prometheus에 연결할 수 없습니다. 모니터링 서비스를 확인하세요.'; $('metrics').replaceChildren(); $('charts').replaceChildren(); return; }
+        $('dashboardState').textContent = `${data.environment} · ${new Date(data.at).toLocaleString('ko-KR')} 기준 · 15초마다 갱신`;
+        renderStats(data.stats);
+        const grid = $('charts'); grid.replaceChildren(...data.charts.map(renderChart));
+      } catch (e) { if (requestId === dashboardRequest) $('dashboardState').textContent = e.message; }
+    }
     async function api(path, options = {}) {
       const response = await fetch(path, { ...options, cache: 'no-store', headers: { 'X-Control-Token': token, 'Content-Type': 'application/json' } });
       if (!response.ok) { const body = await response.json().catch(() => ({})); throw new Error(body.error || `HTTP ${response.status}`); }
@@ -78,7 +166,8 @@
         fill('jobs', data.jobs, j => [j.command, j.symbol || '—', j.state, new Date(j.startedAt).toLocaleString('ko-KR'), j.exitCode]);
       } catch (e) { message(e.message, true); }
     }
-    $('connect').onclick = () => { token = $('token').value; $('token').value = ''; refresh(); };
+    $('connect').onclick = () => { token = $('token').value; $('token').value = ''; refresh(); refreshDashboard(); };
+    $('range').onchange = refreshDashboard;
     $('run').onclick = async () => {
       if (!token) return message('먼저 컨트롤 토큰으로 연결하세요.', true);
       const request = Object.fromEntries(['command', 'symbol', 'venue', 'session', 'from', 'to', 'startTime', 'endTime', 'version'].map(id => [id, $(id).value]));
@@ -88,6 +177,7 @@
       catch (e) { message(e.message, true); }
     };
     setInterval(refresh, 10000);
+    setInterval(refreshDashboard, 15000);
   </script>
 </body>
 </html>

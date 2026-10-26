@@ -22,6 +22,7 @@
 flowchart LR
     CONSOLE["로컬 웹 콘솔"] --> TOWER["컨트롤타워 API<br/>인증 · 작업 제어 · 상태 집계"]
     TOWER --> OBS["서비스별 상태 기록"]
+    TOWER --> PROM["로컬 Prometheus<br/>운영 지표 조회"]
     TOWER --> TRAIN
     KIS["한국투자증권<br/>시세 WS · 주문/계좌 REST"] --> ING["Mac: 시세·계좌 수집"]
     DART["OpenDART<br/>공시 검색"] --> EVT["Mac: 사건 수집"]
