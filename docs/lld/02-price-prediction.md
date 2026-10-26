@@ -4,7 +4,7 @@
 >
 > 범위: 관찰 MVP의 가격 예측과 사후 평가. 주문 실행은 포함하지 않는다.
 >
-> 관련 요구사항: [PRD](../prd/PRD.md) R3·R5·R9 / [HLD](../hld/HLD.md) 5.1장 / [Market Data LLD](01-market-data.md)
+> 관련 요구사항: [PRD](../prd/PRD.md) R3·R5·R9 / [HLD](../hld/HLD.md) 5.1장 / [Market Data LLD](01-market-data.md) / [Historical Data & Feedback Loop LLD](04-learning-data-and-feedback.md)
 
 ## 1. 이 컴포넌트가 하는 일
 
@@ -128,6 +128,8 @@ step(feature_t, state_t-1) -> state_t, {
 사용 가능 상태는 `READY`, `WARMING_UP`, `INPUT_INCOMPLETE`, `STALE`, `TARGET_CLOSED`, `ACTUAL_DEFINITION_UNCONFIRMED`, `MODEL_ERROR`로 시작한다. `READY` 이외의 예측은 가격을 `null`로 저장하고 판단기의 신규 진입 근거로 쓰지 않는다. 기준선만 준비된 단계에서는 `modelVersion=baseline-persistence-v1`로 명시한다.
 
 ## 6. 학습과 평가
+
+과거 데이터 수집, 원본·데이터셋 버전 관리, 전략 순손익까지 이어지는 피드백 루프는 [Historical Data & Feedback Loop LLD](04-learning-data-and-feedback.md)에 정의한다. 이 컴포넌트는 그 데이터셋에서 예측 모델을 학습하고 동일한 시점·표본의 기준선과 비교한다.
 
 학습은 장중 수집·판단과 분리해, 저장한 확정 봉과 사후 확인된 정답으로 실행한다. 1분마다 전체 과거를 다시 넣어 학습하지 않는다. 학습 시에는 연속된 정상 봉 구간을 시간순으로 펼쳐 상태를 갱신하고, 짧은 구간으로 나눠 역전파한다. 결손·장 경계에서는 상태를 초기화한다. 예측 당시 사용할 수 없던 정정 가격이나 이후 공시는 특징에 포함하지 않는다.
 
