@@ -50,6 +50,44 @@ flowchart LR
 
 WebSocket 읽기, 파일 기록, 봉 집계는 별도 작업으로 돌린다. 작업 사이 대기열에는 상한을 둔다. 기록이 밀려 체결을 보존하지 못하면 조용히 건너뛰지 않고 해당 시간대를 **누락 구간**으로 표시한다. AI 분석과 AWS 게시 작업은 이 대기열을 공유하지 않는다.
 
+### 구성 요소별 책임
+
+아래 이름은 구현 단위를 설명하기 위한 것이다. 구현 언어가 정해지면 함수 또는 클래스로 옮기되, 외부 API 응답 형식이 집계 로직으로 퍼지지 않게 한다.
+
+| 구성 요소 | 맡는 일 | 다음 단계에 전달하는 값 |
+| --- | --- | --- |
+| `SubscriptionManager` | 연결, 관심 종목 구독·해제, 재접속 | 구독 결과와 연결 상태 |
+| `FrameReceiver` | 메시지 수신 시각·순서 부여, 제한된 대기열에 전달 | 수신 메시지 |
+| `RawJournal` | 원본 메시지 추가 기록과 재생 위치 관리 | 원본 ID와 저장 위치 |
+| `TickNormalizer` | 채널별 필드 해석, 값·시장·시각 검증 | `MarketTick` 또는 오류 사유 |
+| `MinuteBarBuilder` | 종목·시장별 집계, 분 경계에 봉 확정 | `MinuteBar` |
+| `MarketHealthTracker` | 구독 상태·수신 지연·누락 구간 관리 | `MarketHealth` |
+
+`TickNormalizer`만 한투의 필드 이름을 알아야 한다. `MinuteBarBuilder`는 정규화된 체결과 누락 구간만 받는다. 원본 기록 성공을 확인하기 전에는 정규화 결과를 집계하지 않는다.
+
+### 체결 처리 시퀀스
+
+```mermaid
+sequenceDiagram
+    participant K as 한투 WebSocket
+    participant R as FrameReceiver
+    participant J as RawJournal
+    participant N as TickNormalizer
+    participant B as MinuteBarBuilder
+    participant P as 예측기·판단기
+    K->>R: 체결 메시지
+    R->>J: 수신 시각·순서를 붙인 원본
+    J-->>R: 기록 위치
+    R->>N: 원본과 기록 위치
+    N->>B: 검증된 MarketTick
+    Note over B: 분 경계 + late_grace
+    B->>J: 확정 MinuteBar 기록
+    J-->>B: 기록 완료
+    B->>P: 봉 ID·품질 상태 발행
+```
+
+원본 기록이나 검증이 실패하면 체결은 봉으로 넘어가지 않는다. 봉 기록이 실패하면 발행하지 않는다. 연결·대기열 장애는 `MarketHealthTracker`가 누락 구간으로 기록하고, `MinuteBarBuilder`가 해당 봉을 `INCOMPLETE`로 확정한다.
+
 ## 4. 1분봉은 언제 쓸 수 있나
 
 각 봉의 키는 `(환경, 종목, 시장, 장 구간, 분 시작 시각)`이다. KRX와 NXT, 서로 다른 장 구간의 거래량을 섞지 않는다. 봉은 분 경계 이후 설정된 `late_grace`만큼 기다린 뒤 한 번 확정한다. 실제 `late_grace` 값은 장중 지연을 측정해 관찰 MVP 시작 전에 정한다.
@@ -67,6 +105,22 @@ WebSocket 읽기, 파일 기록, 봉 집계는 별도 작업으로 돌린다. �
 봉이 확정되면 `bar_id`, 품질 상태, 확정 시각을 예측기와 판단기에 알린다. 상태가 `READY`가 아니거나 최신성 한도를 넘었다면 판단기는 그 이유를 기록하고 **신규 진입을 대기**한다. 이전의 정상 봉을 현재 봉처럼 재사용하지 않는다.
 
 ## 5. 끊기거나 다시 시작하면
+
+### WebSocket 구독 상태
+
+```mermaid
+stateDiagram-v2
+    [*] --> DISCONNECTED
+    DISCONNECTED --> CONNECTING: 연결 시도
+    CONNECTING --> SUBSCRIBING: 소켓 연결
+    SUBSCRIBING --> SUBSCRIBED: 구독 확인
+    CONNECTING --> BACKOFF: 연결 실패
+    SUBSCRIBING --> BACKOFF: 구독 실패·연결 종료
+    SUBSCRIBED --> BACKOFF: 연결 종료
+    BACKOFF --> CONNECTING: 재시도 시각 도달
+```
+
+`SUBSCRIBED`는 구독이 확인됐다는 뜻이다. **시세가 최신이라는 뜻은 아니다.** 마지막 수신 시각과 누락 여부는 `MarketHealthTracker`가 별도로 판단한다. 재접속 후에도 장애가 걸친 과거 봉은 정상으로 바꾸지 않는다.
 
 | 상황 | 처리 |
 | --- | --- |
@@ -101,6 +155,7 @@ WebSocket 읽기, 파일 기록, 봉 집계는 별도 작업으로 돌린다. �
 - 연결이 끊긴 분은 체결이 일부 있어도 `INCOMPLETE`다.
 - 체결이 없는 분은 가격이 `null`인 `EMPTY_UNVERIFIED`이며 이전 가격을 복사하지 않는다.
 - 같은 원본 파일을 재생해도 체결 수량과 봉이 중복되지 않는다.
+- 구독 실패와 연결 종료 후 재시도해도 관심 종목 구독이 복구되고, 중단 구간은 정상 봉으로 바뀌지 않는다.
 - 각 화면과 판단 기록에서 시장, 마지막 수신 시각, 봉 상태, 보류 이유를 확인할 수 있다.
 
 구현 전에는 **한투 계좌의 KRX·NXT 구독 가능 범위**, 실제 수신 필드와 장 구간 코드, 연결이 끊긴 동안 조회 API로 복구할 수 있는 범위를 확인한다. 장중 표본으로 `late_grace`, 시세 최신성 한도, 대기열 크기와 재접속 간격을 정한다. 확인되지 않은 시장·장 구간은 자동매매 입력으로 활성화하지 않는다.
