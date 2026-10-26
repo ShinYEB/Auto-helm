@@ -8,6 +8,7 @@ plugins {
 java { toolchain { languageVersion = JavaLanguageVersion.of(21) } }
 
 dependencies {
+    implementation(project(":control-contract"))
     implementation(project(":journal-bridge"))
     implementation("org.springframework.boot:spring-boot-starter")
     implementation("org.springframework.boot:spring-boot-starter-data-redis")

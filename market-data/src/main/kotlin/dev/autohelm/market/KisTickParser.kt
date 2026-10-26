@@ -7,7 +7,12 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
 /** Parses only the KRX/NXT trade channels from the KIS public WebSocket examples. */
-class KisTickParser(private val properties: MarketProperties) {
+class KisTickParser(
+    private val properties: MarketProperties,
+    private val subscriptions: () -> Map<String, Set<Venue>> = {
+        properties.symbols.associateWith { Venue.entries.toSet() }
+    },
+) {
     private val seoul = ZoneId.of("Asia/Seoul")
     private val dateFormat = DateTimeFormatter.BASIC_ISO_DATE
     private val timeFormat = DateTimeFormatter.ofPattern("HHmmss")
@@ -28,7 +33,7 @@ class KisTickParser(private val properties: MarketProperties) {
         return (0 until count).map { row ->
             val offset = row * 47
             val symbol = fields[offset]
-            require(symbol in properties.symbols) { "Unsubscribed symbol" }
+            require(venue in subscriptions()[symbol].orEmpty()) { "Unsubscribed symbol or venue" }
             val date = LocalDate.parse(fields[offset + 33], dateFormat)
             val time = LocalTime.parse(fields[offset + 1], timeFormat)
             val session = properties.sessions.singleOrNull {

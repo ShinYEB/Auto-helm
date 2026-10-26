@@ -26,6 +26,7 @@ class KisWebSocketConnector(
     private val properties: MarketProperties,
     private val mapper: ObjectMapper,
     private val worker: MarketWorker,
+    private val managedSymbols: ManagedMarketSymbols,
 ) {
     private class SubscriptionRejected(message: String) : IllegalStateException(message)
 
@@ -62,11 +63,25 @@ class KisWebSocketConnector(
         var key: String? = null
         while (running) {
             try {
+                val expected = managedSymbols.subscriptions()
+                if (expected.isEmpty()) {
+                    Thread.sleep(2000)
+                    continue
+                }
                 if (key == null) key = approvalKey()
-                val listener = KisListener(key)
+                val listener = KisListener(key, expected)
                 val ws = client.newWebSocketBuilder().connectTimeout(Duration.ofSeconds(10))
                     .buildAsync(URI.create(properties.wsUrl), listener).join()
                 socket = ws
+                while (running && !listener.closed.isDone) {
+                    if (managedSymbols.subscriptions() != expected) {
+                        log.info("Market subscriptions changed; reconnecting")
+                        listener.closed.complete(Unit)
+                        ws.abort()
+                        break
+                    }
+                    Thread.sleep(2000)
+                }
                 listener.closed.join()
                 waitSeconds = 1
             } catch (ex: Exception) {
@@ -83,14 +98,11 @@ class KisWebSocketConnector(
         }
     }
 
-    private inner class KisListener(private val approvalKey: String) : WebSocket.Listener {
+    private inner class KisListener(private val approvalKey: String, private val expected: Set<String>) : WebSocket.Listener {
         val closed = CompletableFuture<Unit>()
         private val epoch = UUID.randomUUID().toString()
         private val sequence = AtomicLong()
         private val text = StringBuilder()
-        private val expected = properties.symbols.flatMap { symbol ->
-            listOf("H0STCNT0:$symbol", "H0NXCNT0:$symbol")
-        }.toSet()
         private val confirmed = ConcurrentHashMap.newKeySet<String>()
 
         override fun onOpen(webSocket: WebSocket) {

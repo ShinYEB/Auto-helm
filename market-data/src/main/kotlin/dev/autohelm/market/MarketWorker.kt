@@ -16,11 +16,13 @@ class MarketWorker(
     private val properties: MarketProperties,
     mapper: ObjectMapper,
     publisher: ApplicationEventPublisher,
+    managedSymbols: ManagedMarketSymbols,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
     private val clock = Clock.systemUTC()
-    private val health = MarketHealthTracker(properties)
-    private val engine = MarketEngine(properties, MarketJournal(properties, mapper),
+    private val health = MarketHealthTracker(properties, managedSymbols::current)
+    private val engine = MarketEngine(properties, MarketJournal(properties, mapper), managedSymbols::current,
+        activeFrom = managedSymbols::activeFrom,
         onBar = { publisher.publishEvent(it) }, onTick = health::received)
     private val queue = ArrayBlockingQueue<RawFrame>(properties.queueCapacity)
     private val overflowStarted = AtomicReference<Instant?>(null)

@@ -29,6 +29,9 @@
     .chart svg { display: block; width: 100%; height: 210px; }
     .legend { display: flex; flex-wrap: wrap; gap: 6px 12px; color: #b7cbd4; font-size: .78rem; }
     .legend span::before { content: '●'; color: var(--series-color); padding-right: 4px; }
+    .check { display: flex; align-items: center; gap: 6px; flex: 0 0 auto !important; }
+    .check input { width: 17px; height: 17px; }
+    .secondary { background: #35505e; }
   </style>
 </head>
 <body>
@@ -51,12 +54,28 @@
     <div id="charts" class="chart-grid"></div>
   </section>
   <section>
+    <h2>종목 관리</h2>
+    <p class="muted">이 표는 콘솔에서 관리하는 종목만 보여줍니다. 기존 YAML 기본 종목은 표에 나타나지 않으며, 같은 코드를 등록하면 설정을 덮어씁니다. 비활성화해도 기존 기록은 남습니다. 실행 중인 구버전 수집기는 새 코드로 재시작한 뒤 변경을 읽습니다.</p>
+    <div class="row">
+      <label>종목코드 <input id="managedSymbol" maxlength="6" placeholder="005930"></label>
+      <label>종목명 <input id="managedName" maxlength="80" placeholder="삼성전자"></label>
+      <label class="check"><input id="managedKrx" type="checkbox" checked> KRX</label>
+      <label class="check"><input id="managedNxt" type="checkbox"> NXT</label>
+    </div>
+    <div class="row" style="margin-top:12px">
+      <label>뉴스 검색어 <input id="managedQuery" placeholder="삼성전자"></label>
+      <label>DART 기업 고유번호 <input id="managedCorp" maxlength="8" placeholder="00126380"></label>
+      <button id="saveSymbol">등록·수정</button>
+    </div>
+    <table><thead><tr><th>종목</th><th>시장</th><th>뉴스 검색어</th><th>DART 코드</th><th>상태</th><th>관리</th></tr></thead><tbody id="symbols"></tbody></table>
+  </section>
+  <section>
     <h2>서비스 관측</h2>
     <p class="muted">기록 기반 상태입니다. 마지막 갱신 시각이 오래되면 실행 중으로 판단하지 않습니다.</p>
     <table><thead><tr><th>서비스</th><th>상태</th><th>관측 시각</th><th>근거</th></tr></thead><tbody id="services"></tbody></table>
   </section>
   <section>
-    <h2>학습 배치</h2>
+    <h2>모델·학습</h2>
     <div class="row">
       <label>작업 <select id="command"><option value="collect">과거 분봉 수집</option><option value="fit">모델 학습</option><option value="promote-dev">dev 모델 승격</option></select></label>
       <label>종목코드 <input id="symbol" value="005930" maxlength="6"></label>
@@ -73,10 +92,25 @@
     </div>
     <p class="muted">한 번에 한 작업만 실행합니다. prd 승격과 주문은 이 화면에서 제공하지 않습니다.</p>
     <table><thead><tr><th>작업</th><th>종목</th><th>상태</th><th>시작</th><th>종료 코드</th></tr></thead><tbody id="jobs"></tbody></table>
+    <h3>과거 데이터 확보</h3>
+    <table><thead><tr><th>종목</th><th>시장·장</th><th>완료 거래일</th><th>기간</th></tr></thead><tbody id="coverage"></tbody></table>
+    <h3>활성 모델</h3>
+    <table><thead><tr><th>종목</th><th>시장</th><th>버전</th><th>1분 MAE / 기준선</th><th>1시간 MAE / 기준선</th></tr></thead><tbody id="activeModels"></tbody></table>
+    <h3>학습 후보</h3>
+    <table><thead><tr><th>버전</th><th>종목·시장</th><th>검증</th><th>1분 MAE / 기준선</th><th>1시간 MAE / 기준선</th></tr></thead><tbody id="candidates"></tbody></table>
+  </section>
+  <section>
+    <h2>정보 관리</h2>
+    <p class="muted">제공처별 수집 상태와 최근 사건을 표시합니다. 출처가 내려오지 않았거나 갱신이 늦은 경우 마지막 성공 시각을 확인하세요.</p>
+    <h3>정보 제공처</h3>
+    <table><thead><tr><th>제공처</th><th>상태</th><th>조회·성공·실패</th><th>429</th><th>발견</th><th>마지막 성공</th></tr></thead><tbody id="sources"></tbody></table>
+    <h3>최근 사건</h3>
+    <table><thead><tr><th>발견 시각</th><th>출처</th><th>종목</th><th>제목</th></tr></thead><tbody id="recentEvents"></tbody></table>
   </section>
   <script>
     let token = '';
     let dashboardRequest = 0;
+    let watchlistRevision = 0;
     const $ = id => document.getElementById(id);
     const message = (value, error = false) => { $('message').textContent = value; $('message').className = error ? 'error' : 'muted'; };
     const cell = (row, value) => { const td = document.createElement('td'); td.textContent = value ?? '—'; row.appendChild(td); };
@@ -152,6 +186,61 @@
         const grid = $('charts'); grid.replaceChildren(...data.charts.map(renderChart));
       } catch (e) { if (requestId === dashboardRequest) $('dashboardState').textContent = e.message; }
     }
+    async function refreshManagement() {
+      if (!token) return;
+      try {
+        const [watchlist, models, information] = await Promise.all([
+          api('/api/symbols'), api('/api/models'), api('/api/information')
+        ]);
+        watchlistRevision = watchlist.revision;
+        const body = $('symbols'); body.replaceChildren();
+        for (const entry of Object.values(watchlist.entries).sort((a, b) => a.symbol.localeCompare(b.symbol))) {
+          const row = document.createElement('tr');
+          [entry.symbol + ' ' + entry.name, entry.venues.join('·'), entry.gdeltQuery, entry.dartCorpCode,
+            entry.enabled ? '사용' : '비활성'].forEach(value => cell(row, value));
+          const actions = document.createElement('td');
+          const edit = document.createElement('button'); edit.className = 'secondary'; edit.textContent = '편집';
+          edit.onclick = () => { $('managedSymbol').value = entry.symbol; $('managedName').value = entry.name;
+            $('managedKrx').checked = entry.venues.includes('KRX'); $('managedNxt').checked = entry.venues.includes('NXT');
+            $('managedQuery').value = entry.gdeltQuery || ''; $('managedCorp').value = entry.dartCorpCode || ''; };
+          actions.appendChild(edit);
+          if (entry.enabled) {
+            const disable = document.createElement('button'); disable.className = 'secondary'; disable.textContent = '비활성화';
+            disable.style.marginLeft = '6px';
+            disable.onclick = async () => {
+              if (!confirm(`${entry.symbol} 수집을 비활성화할까요?`)) return;
+              try { await api(`/api/symbols/${entry.symbol}?revision=${watchlistRevision}`, { method: 'DELETE' }); await refreshManagement(); }
+              catch (error) { message(error.message, true); }
+            };
+            actions.appendChild(disable);
+          }
+          row.appendChild(actions); body.appendChild(row);
+        }
+        fill('coverage', models.coverage, c => [c.symbol, `${c.venue} · ${c.session}`, c.completeDays, `${c.firstDate} ~ ${c.lastDate}`]);
+        const errors = m => `${number(m.next1mMae)} / ${number(m.next1mBaselineMae)}`;
+        const hourErrors = m => `${number(m.after1hMae)} / ${number(m.after1hBaselineMae)}`;
+        fill('activeModels', models.active, m => [m.symbol, m.venue, m.version, errors(m), hourErrors(m)]);
+        fill('candidates', models.candidates, m => [m.version, `${m.symbol} ${m.venue}`, m.eligible ? '승격 가능' : '기준 미달', errors(m), hourErrors(m)]);
+        fill('sources', information.sources, s => [s.source, s.enabled ? s.lastResult : '꺼짐',
+          `${s.attempts} · ${s.successes} · ${s.failures}`, s.rateLimits, s.discovered,
+          s.lastSuccessAt ? new Date(s.lastSuccessAt).toLocaleString('ko-KR') : '—']);
+        const eventsBody = $('recentEvents'); eventsBody.replaceChildren();
+        for (const event of information.recentEvents) {
+          const row = document.createElement('tr');
+          [new Date(event.firstSeenAt).toLocaleString('ko-KR'), event.source, event.symbol].forEach(value => cell(row, value));
+          const title = document.createElement('td');
+          try {
+            const url = new URL(event.url);
+            if (!['http:', 'https:'].includes(url.protocol)) throw new Error('unsupported link');
+            const link = document.createElement('a'); link.href = url.href; link.target = '_blank';
+            link.rel = 'noopener noreferrer'; link.textContent = event.title;
+            title.appendChild(link);
+          } catch (_) { title.textContent = event.title; }
+          row.appendChild(title); eventsBody.appendChild(row);
+        }
+        if (models.error) message(models.error, true);
+      } catch (error) { message(error.message, true); }
+    }
     async function api(path, options = {}) {
       const response = await fetch(path, { ...options, cache: 'no-store', headers: { 'X-Control-Token': token, 'Content-Type': 'application/json' } });
       if (!response.ok) { const body = await response.json().catch(() => ({})); throw new Error(body.error || `HTTP ${response.status}`); }
@@ -166,8 +255,20 @@
         fill('jobs', data.jobs, j => [j.command, j.symbol || '—', j.state, new Date(j.startedAt).toLocaleString('ko-KR'), j.exitCode]);
       } catch (e) { message(e.message, true); }
     }
-    $('connect').onclick = () => { token = $('token').value; $('token').value = ''; refresh(); refreshDashboard(); };
+    $('connect').onclick = () => { token = $('token').value; $('token').value = ''; refresh(); refreshDashboard(); refreshManagement(); };
     $('range').onchange = refreshDashboard;
+    $('saveSymbol').onclick = async () => {
+      if (!token) return message('먼저 컨트롤 토큰으로 연결하세요.', true);
+      const symbol = $('managedSymbol').value.trim().toUpperCase();
+      const venues = ['KRX', 'NXT'].filter(venue => $(venue === 'KRX' ? 'managedKrx' : 'managedNxt').checked);
+      try {
+        await api(`/api/symbols/${encodeURIComponent(symbol)}`, { method: 'PUT', body: JSON.stringify({
+          revision: watchlistRevision, name: $('managedName').value.trim(), venues,
+          gdeltQuery: $('managedQuery').value.trim() || null, dartCorpCode: $('managedCorp').value.trim() || null
+        }) });
+        message(`${symbol} 설정을 저장했습니다.`); await refreshManagement();
+      } catch (error) { message(error.message, true); }
+    };
     $('run').onclick = async () => {
       if (!token) return message('먼저 컨트롤 토큰으로 연결하세요.', true);
       const request = Object.fromEntries(['command', 'symbol', 'venue', 'session', 'from', 'to', 'startTime', 'endTime', 'version'].map(id => [id, $(id).value]));
@@ -178,6 +279,7 @@
     };
     setInterval(refresh, 10000);
     setInterval(refreshDashboard, 15000);
+    setInterval(refreshManagement, 30000);
   </script>
 </body>
 </html>

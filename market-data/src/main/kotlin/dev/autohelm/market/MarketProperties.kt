@@ -26,7 +26,7 @@ data class MarketProperties(
         require(queueCapacity > 0 && !lateGrace.isNegative)
         require(symbols.all { it.matches(Regex("[0-9A-Z]{6}")) })
         if (enabled) {
-            require(symbols.isNotEmpty() && appKey.isNotBlank() && appSecret.isNotBlank())
+            require(appKey.isNotBlank() && appSecret.isNotBlank())
             require((environment == "dev" && "31000" in wsUrl) || (environment == "prd" && "21000" in wsUrl)) {
                 "WebSocket endpoint must match the selected environment"
             }

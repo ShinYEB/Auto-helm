@@ -3,7 +3,12 @@ package dev.autohelm.market
 import java.time.Instant
 
 /** Current status is in memory; durable outages are written as MarketGap events. */
-class MarketHealthTracker(private val properties: MarketProperties) {
+class MarketHealthTracker(
+    private val properties: MarketProperties,
+    private val subscriptions: () -> Map<String, Set<Venue>> = {
+        properties.symbols.associateWith { Venue.entries.toSet() }
+    },
+) {
     private val states = mutableMapOf<Pair<String, Venue>, MarketHealth>()
 
     @Synchronized
@@ -35,12 +40,12 @@ class MarketHealthTracker(private val properties: MarketProperties) {
     fun restored(at: Instant) = updateAll(at) { it.copy(gapStartedAt = null, updatedAt = at) }
 
     @Synchronized
-    fun snapshot(now: Instant): List<MarketHealth> = properties.symbols.flatMap { symbol ->
-        Venue.entries.map { venue -> states[symbol to venue] ?: initial(symbol, venue, now) }
+    fun snapshot(now: Instant): List<MarketHealth> = subscriptions().flatMap { (symbol, venues) ->
+        venues.map { venue -> states[symbol to venue] ?: initial(symbol, venue, now) }
     }
 
     private fun updateAll(at: Instant, transform: (MarketHealth) -> MarketHealth) {
-        for (symbol in properties.symbols) for (venue in Venue.entries) {
+        for ((symbol, venues) in subscriptions()) for (venue in venues) {
             val key = symbol to venue
             states[key] = transform(states[key] ?: initial(symbol, venue, at))
         }

@@ -15,6 +15,7 @@ import java.time.Instant
 class EventCollector(
     private val properties: EventProperties,
     mapper: ObjectMapper,
+    private val managedSymbols: ManagedEventSymbols = ManagedEventSymbols(properties, mapper),
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
     private val clock = Clock.systemUTC()
@@ -24,8 +25,8 @@ class EventCollector(
     private val dart = OpenDartAdapter(properties, mapper)
     private val seen = mutableSetOf<String>()
     private val seenLinks = mutableSetOf<String>()
-    private val nextGdelt = properties.gdelt.searches.keys.associateWith { Instant.EPOCH }.toMutableMap()
-    private val nextDart = properties.dart.corpCodes.keys.associateWith { Instant.EPOCH }.toMutableMap()
+    private val nextGdelt = mutableMapOf<String, Instant>()
+    private val nextDart = mutableMapOf<String, Instant>()
     private var lastGdeltRequest = Instant.EPOCH
     private var gdeltBlockedUntil = Instant.EPOCH
     private var gdeltBackoff = Duration.ofMinutes(1)
@@ -46,25 +47,31 @@ class EventCollector(
         while (running) {
             health.heartbeat()
             val now = clock.instant()
+            val gdeltSearches = managedSymbols.gdeltSearches()
+            val dartCorpCodes = managedSymbols.dartCorpCodes()
+            nextGdelt.keys.retainAll(gdeltSearches.keys)
+            nextDart.keys.retainAll(dartCorpCodes.keys)
+            gdeltSearches.keys.forEach { nextGdelt.putIfAbsent(it, Instant.EPOCH) }
+            dartCorpCodes.keys.forEach { nextDart.putIfAbsent(it, Instant.EPOCH) }
             if (properties.dart.enabled) {
                 val symbol = nextDart.entries.firstOrNull { !now.isBefore(it.value) }?.key
-                if (symbol != null) pollDart(symbol, now)
+                if (symbol != null) pollDart(symbol, dartCorpCodes.getValue(symbol), now)
             }
             if (properties.gdelt.enabled && !now.isBefore(gdeltBlockedUntil) &&
                 !now.isBefore(lastGdeltRequest.plus(properties.gdelt.minRequestGap))) {
                 val symbol = nextGdelt.entries.firstOrNull { !now.isBefore(it.value) }?.key
-                if (symbol != null) pollGdelt(symbol, now)
+                if (symbol != null) pollGdelt(symbol, gdeltSearches.getValue(symbol), now)
             }
             try { Thread.sleep(1000) } catch (_: InterruptedException) { break }
         }
     }
 
-    private fun pollGdelt(symbol: String, now: Instant) {
+    private fun pollGdelt(symbol: String, keyword: String, now: Instant) {
         lastGdeltRequest = now
         nextGdelt[symbol] = now.plus(properties.gdelt.pollInterval)
         health.attempt(EventSource.GDELT)
         try {
-            val result = gdelt.fetch(symbol, properties.gdelt.searches.getValue(symbol), now)
+            val result = gdelt.fetch(symbol, keyword, now)
             val discovered = save(result)
             gdeltBackoff = Duration.ofMinutes(1)
             health.success(EventSource.GDELT, discovered)
@@ -81,11 +88,10 @@ class EventCollector(
         }
     }
 
-    private fun pollDart(symbol: String, now: Instant) {
+    private fun pollDart(symbol: String, corpCode: String, now: Instant) {
         nextDart[symbol] = now.plus(properties.dart.pollInterval)
         health.attempt(EventSource.DART)
         try {
-            val corpCode = properties.dart.corpCodes.getValue(symbol)
             var discovered = 0
             for (result in dart.fetch(symbol, corpCode, now)) {
                 journal.appendRaw(RawFetch(result.source, result.query, result.receivedAt, result.status, result.body))

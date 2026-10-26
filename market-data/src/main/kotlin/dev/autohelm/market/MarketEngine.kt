@@ -10,12 +10,16 @@ import java.time.temporal.ChronoUnit
 class MarketEngine(
     private val properties: MarketProperties,
     private val journal: MarketJournal,
-    private val parser: KisTickParser = KisTickParser(properties),
+    private val subscriptions: () -> Map<String, Set<Venue>> = {
+        properties.symbols.associateWith { Venue.entries.toSet() }
+    },
+    private val activeFrom: (String, Venue) -> Instant? = { _, _ -> null },
+    private val parser: KisTickParser = KisTickParser(properties, subscriptions),
     private val onBar: (MinuteBar) -> Unit = {},
     private val onTick: (MarketTick) -> Unit = {},
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
-    private val builder = MinuteBarBuilder(properties)
+    private val builder = MinuteBarBuilder(properties, subscriptions, activeFrom)
     private val seoul = ZoneId.of("Asia/Seoul")
     private val latestTicks = mutableMapOf<Pair<String, Venue>, MarketTick>()
     private var lastRawAt: Instant? = null

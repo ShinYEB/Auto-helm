@@ -42,6 +42,18 @@ class MarketPipelineTest {
     }
 
     @Test
+    fun `new subscription does not fabricate earlier empty minutes`() {
+        val props = properties().copy(symbols = emptyList())
+        val activation = start.plusSeconds(75)
+        val builder = MinuteBarBuilder(props, { mapOf("005930" to setOf(Venue.KRX)) },
+            { _, _ -> activation })
+
+        val bars = builder.readyToSeal(start.plusSeconds(184))
+        assertThat(bars.map { it.minuteStart }).containsExactly(start.plusSeconds(120))
+        assertThat(bars.single().quality).isEqualTo(BarQuality.EMPTY_UNVERIFIED)
+    }
+
+    @Test
     fun `market ticks produce separate venue bars and no-trade minute stays empty`() {
         val props = properties()
         val mapper = jacksonObjectMapper().registerModule(JavaTimeModule())

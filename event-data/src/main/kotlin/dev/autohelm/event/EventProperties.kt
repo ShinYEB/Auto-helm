@@ -38,7 +38,6 @@ data class GdeltProperties(
         require(!pollInterval.isNegative && !pollInterval.isZero)
         require(minRequestGap >= Duration.ofSeconds(5))
         if (enabled) {
-            require(searches.isNotEmpty())
             require(searches.keys.all { it.matches(Regex("[0-9A-Z]{6}")) })
             require(searches.values.all { it.isNotBlank() })
         }
@@ -55,7 +54,7 @@ data class DartProperties(
     init {
         require(!pollInterval.isNegative && !pollInterval.isZero)
         if (enabled) {
-            require(apiKey.isNotBlank() && corpCodes.isNotEmpty())
+            require(apiKey.isNotBlank())
             require(corpCodes.keys.all { it.matches(Regex("[0-9A-Z]{6}")) })
             require(corpCodes.values.all { it.matches(Regex("[0-9]{8}")) })
         }
