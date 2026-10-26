@@ -30,4 +30,8 @@ class ManagedEventSymbols(properties: EventProperties, mapper: ObjectMapper) {
         }
         return result
     }
+
+    fun companyNames(): Map<String, String> = reader.current().entries
+        .filterValues { it.enabled }
+        .mapValues { it.value.name }
 }

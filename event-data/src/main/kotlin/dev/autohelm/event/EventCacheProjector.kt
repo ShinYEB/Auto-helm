@@ -23,6 +23,8 @@ class EventCacheProjector(
     private val root = properties.dataDir.resolve(properties.environment).resolve("events")
     private val events = JsonlTailer(root.resolve("events"), root.resolve("bridge/events.cursor"))
     private val links = JsonlTailer(root.resolve("links"), root.resolve("bridge/links.cursor"))
+    private val analyses = JsonlTailer(root.resolve("analysis"), root.resolve("bridge/analysis.cursor"))
+    private val searches = JsonlTailer(root.resolve("search"), root.resolve("bridge/search.cursor"))
     private val prefix = "autohelm:${properties.environment}"
     private val readyKey = "$prefix:event-cache:v1:ready"
     private val heartbeatKey = "$prefix:event-cache:v1:heartbeat"
@@ -42,6 +44,8 @@ class EventCacheProjector(
             // Redis may have restarted. Full replay is idempotent and reconstructs both indexes.
             events.reset()
             links.reset()
+            analyses.reset()
+            searches.reset()
             rebuilding = true
         }
         val eventCount = events.drain { json ->
@@ -65,10 +69,30 @@ class EventCacheProjector(
                 redis.expire(eventKey, Duration.ofDays(30))
             }
         }
+        val analysisCount = analyses.drain { json ->
+            val result = mapper.readValue<IssueAnalysis>(json)
+            require(result.environment == properties.environment) { "Wrong environment in analysis journal" }
+            require(result.symbol.matches(Regex("[0-9A-Z]{6}")))
+            if (!result.completedAt.isBefore(Instant.now().minus(Duration.ofDays(30)))) {
+                val key = "$prefix:symbol:v1:${result.symbol}:issue-score"
+                redis.opsForHash<String, String>().put(key, result.eventId, json)
+                redis.expire(key, Duration.ofDays(31))
+            }
+        }
+        val searchCount = searches.drain { json ->
+            val result = mapper.readValue<IssueSearchResult>(json)
+            require(result.environment == properties.environment) { "Wrong environment in search journal" }
+            require(result.symbol.matches(Regex("[0-9A-Z]{6}")))
+            if (!result.completedAt.isBefore(Instant.now().minus(Duration.ofDays(30)))) {
+                val key = "$prefix:symbol:v1:${result.symbol}:issue-search"
+                redis.opsForHash<String, String>().put(key, result.eventId, json)
+                redis.expire(key, Duration.ofDays(31))
+            }
+        }
         redis.opsForValue().set(readyKey, "ready")
         redis.opsForValue().set(heartbeatKey, Instant.now().toString(), Duration.ofSeconds(30))
         rebuilding = false
-        return eventCount + linkCount
+        return eventCount + linkCount + analysisCount + searchCount
     }
 
     private fun loop() {

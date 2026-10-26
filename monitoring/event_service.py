@@ -49,6 +49,14 @@ def secret_env():
         raise RuntimeError("DART_API_KEY is missing from .env")
     env = os.environ.copy()
     env["DART_API_KEY"] = key
+    jev_key = next((line.partition("=")[2].strip() for line in ENV_FILE.read_text().splitlines()
+                    if line.startswith("JEV_API_KEY=")), "")
+    if jev_key:
+        env["JEV_API_KEY"] = jev_key
+    openai_key = next((line.partition("=")[2].strip() for line in ENV_FILE.read_text().splitlines()
+                       if line.startswith("OPENAI_API_KEY=")), "")
+    if openai_key:
+        env["OPENAI_API_KEY"] = openai_key
     return env
 
 

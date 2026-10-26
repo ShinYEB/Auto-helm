@@ -180,7 +180,7 @@ class Metrics:
             event_process_alive = False
         lines.append(sample("autohelm_event_up", int(bool(event.get("running")) and event_process_alive)))
         lines.append(sample("autohelm_event_heartbeat_timestamp_seconds", epoch(event.get("heartbeatAt"))))
-        for source in ("DART", "GDELT"):
+        for source in ("DART", "GDELT", "EINFOMAX"):
             state = event.get("sources", {}).get(source, {})
             labels = {"source": source}
             lines += [
@@ -192,6 +192,14 @@ class Metrics:
                 sample("autohelm_event_discovered_total", int(state.get("discovered", 0)), labels),
                 sample("autohelm_event_last_attempt_timestamp_seconds", epoch(state.get("lastAttemptAt")), labels),
                 sample("autohelm_event_last_success_timestamp_seconds", epoch(state.get("lastSuccessAt")), labels),
+            ]
+        for feed, state in event.get("rssFeeds", {}).items():
+            labels = {"feed": feed}
+            lines += [
+                sample("autohelm_rss_feed_items", int(state.get("lastItemCount", 0)), labels),
+                sample("autohelm_rss_feed_overlap", int(state.get("lastOverlap") or 0), labels),
+                sample("autohelm_rss_feed_new", int(state.get("lastNewCount", 0)), labels),
+                sample("autohelm_rss_feed_possible_gaps_total", int(state.get("possibleGaps", 0)), labels),
             ]
         lines.append(sample("autohelm_exporter_parse_errors_total", sum(t.parse_errors for t in self.tails)))
         return "".join(lines).encode()

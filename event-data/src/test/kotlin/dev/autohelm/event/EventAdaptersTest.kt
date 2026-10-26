@@ -81,6 +81,51 @@ class EventAdaptersTest {
     }
 
     @Test
+    fun `RSS parses article metadata and shares news identity with GDELT`() {
+        val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
+        server.createContext("/rss") { exchange ->
+            val body = """<?xml version="1.0" encoding="UTF-8"?><rss><channel><item>
+                <nsid>12345</nsid><title>삼성전자 실적 발표</title>
+                <link>https://news.example/a?utm_source=rss&amp;id=7</link>
+                <description>짧은 발췌문</description><pubDate>Mon, 26 Oct 2026 18:00:00 +0900</pubDate>
+                </item><item><title>누락</title></item></channel></rss>"""
+            exchange.sendResponseHeaders(200, body.toByteArray().size.toLong())
+            exchange.responseBody.use { it.write(body.toByteArray()) }
+        }
+        server.start()
+        try {
+            val properties = EventProperties(dataDir = directory)
+            val result = InfomaxRssAdapter(properties).fetch("stocks", URI.create("http://127.0.0.1:${server.address.port}/rss"))
+            assertEquals(1, result.items.size)
+            val item = result.items.single()
+            assertEquals("https://news.example/a?id=7", item.record.url)
+            assertEquals(NewsIdentity.id(item.record.url), item.record.id)
+            assertEquals("EINFOMAX:12345", item.record.providerId)
+            assertEquals(Instant.parse("2026-10-26T09:00:00Z"), item.record.publishedAt)
+            assertEquals("짧은 발췌문", item.description)
+            assertFalse(mapper.writeValueAsString(item.record).contains("발췌문"))
+        } finally { server.stop(0) }
+    }
+
+    @Test
+    fun `RSS parses Infomax local publication time as Korea time`() {
+        val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
+        server.createContext("/rss") { exchange ->
+            val body = """<?xml version="1.0"?><rss><channel><item><nsid>88</nsid>
+                <title>실적</title><link>https://news.example/88</link>
+                <pubDate>2026-10-26 16:33:29</pubDate></item></channel></rss>"""
+            exchange.sendResponseHeaders(200, body.toByteArray().size.toLong())
+            exchange.responseBody.use { it.write(body.toByteArray()) }
+        }
+        server.start()
+        try {
+            val result = InfomaxRssAdapter(EventProperties()).fetch("stocks",
+                URI.create("http://127.0.0.1:${server.address.port}/rss"))
+            assertEquals(Instant.parse("2026-10-26T07:33:29Z"), result.items.single().record.publishedAt)
+        } finally { server.stop(0) }
+    }
+
+    @Test
     fun `journal recovers complete records and isolates environments`() {
         val properties = EventProperties(dataDir = directory)
         val journal = EventJournal(properties, mapper)

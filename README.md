@@ -1,11 +1,11 @@
 # Auto-helm
 
-국내 주식의 매매 판단과 결과 검증을 위한 개인 프로젝트다. Gradle 멀티모듈에서 세 개의 상주 데이터 서비스, 학습 배치, 운영용 컨트롤타워를 독립 실행한다. `market-data`는 [Market Data LLD](docs/lld/01-market-data.md)의 관찰용 시세 수집을, `event-data`는 [Event Data LLD](docs/lld/03-event-data.md)의 공시·뉴스 후보 수집을 담당한다. `price-prediction`은 Redis Stream에서 봉을 받아 기준선 또는 승인된 경량 모델의 예측을 기록한다. 주문, AI 사건 분석, 모바일 API는 아직 연결하지 않았다.
+국내 주식의 매매 판단과 결과 검증을 위한 개인 프로젝트다. Gradle 멀티모듈에서 세 개의 상주 데이터 서비스, 학습 배치, 운영용 컨트롤타워를 독립 실행한다. `market-data`는 [Market Data LLD](docs/lld/01-market-data.md)의 관찰용 시세 수집을, `event-data`는 [Event Data LLD](docs/lld/03-event-data.md)의 공시·뉴스 후보 수집을 담당한다. `price-prediction`은 Redis Stream에서 봉을 받아 기준선 또는 승인된 경량 모델의 예측을 기록한다. 주문과 모바일 API는 아직 연결하지 않았다. 사건의 Jev 점수 및 임계치 초과 웹 검색 작업자는 구현했지만 기본 비활성이고 실제 키로 검증하지 않았다.
 
 | 모듈 | 실행 단위 | 현재 책임 |
 | --- | --- | --- |
 | `market-data` | 독립 JAR·프로세스 | 한투 WebSocket 수신, KRX/NXT 1분봉, 로컬 기록 |
-| `event-data` | 독립 JAR·프로세스 | OpenDART 공시 원본, GDELT 뉴스 메타데이터 수집·중복 제거·로컬 기록 |
+| `event-data` | 독립 JAR·프로세스 | OpenDART 공시, GDELT·연합인포맥스 RSS 수집, 사건·분석 파일 기록과 Redis 투영 |
 | `price-prediction` | 독립 JAR·프로세스 | 확정 봉 Stream 소비, 1분·1시간 직전 종가 기준선과 사용 불가 상태 기록 |
 | `model-training` | 실행 후 종료되는 배치 JAR | 한투 과거 분봉 조회·원본 기록, 경량 모델 학습, 명시적 모델 승격 |
 | `model-contract` | 라이브러리 | 모델 묶음의 형식·해시 검증·적재 |
@@ -15,7 +15,7 @@
 
 상주 서비스와 학습 배치는 서로의 메모리를 호출하지 않는다. 파일도 `data/<환경>/market/`, `data/<환경>/events/`, `data/<환경>/prediction/`, `data/<환경>/historical/`로 나눈다. `journal-bridge`는 시세·사건 서비스가 공유하는 JSONL 완성 행 읽기와 체크포인트 코드이며 실행 프로세스가 아니다.
 
-확정 1분봉은 파일 기록 후 별도 작업자가 Redis Stream `autohelm:<환경>:market:minute-bars:v1`에 발행하고, 예측기가 소비자 그룹에서 받는다. 사건과 종목 연결은 별도 작업자가 [Redis 조회 캐시](docs/lld/03-event-data.md#redis-조회-캐시)에 투영한다. 세 경로 모두 기본값은 꺼져 있다. AI 분석 결과 캐시는 아직 구현 전이다. 파일 기록은 원본으로 유지한다.
+확정 1분봉은 파일 기록 후 별도 작업자가 Redis Stream `autohelm:<환경>:market:minute-bars:v1`에 발행하고, 예측기가 소비자 그룹에서 받는다. 사건과 종목 연결은 별도 작업자가 [Redis 조회 캐시](docs/lld/03-event-data.md#6-파일과-redis-계약)에 투영한다. 세 경로 모두 기본값은 꺼져 있다. AI 분석 결과 캐시는 구현했고 설정을 켜면 사용한다. 파일 기록은 원본으로 유지한다.
 
 ## 실행 환경
 
@@ -146,13 +146,16 @@ export KIS_APP_SECRET='...'
 
 ## 사건 수집 설정
 
-`event-data`는 시세 수집과 독립적으로 기동한다. 아래는 GDELT 메타데이터 실험 예시다. 검색어는 종목코드에 연결한다. **같은 종목은 3분마다**, 모든 GDELT 요청은 최소 10초 간격으로 보낸다. 429가 오면 `Retry-After` 또는 지수 대기로 멈춘다.
+`event-data`는 시세 수집과 독립적으로 기동한다. 아래는 RSS와 GDELT 수집 예시다. GDELT 검색어는 종목코드에 연결한다. RSS 피드와 GDELT 검색어는 각각 **5분마다** 조회하며, 모든 GDELT 요청은 최소 10초 간격으로 보낸다. 429가 오면 `Retry-After` 또는 지수 대기로 멈춘다.
 
 ```yaml
 events:
   enabled: true
   environment: dev
   data-dir: ./data
+  rss:
+    enabled: true
+    poll-interval: 5m
   gdelt:
     enabled: true
     searches:
@@ -177,7 +180,7 @@ events:
       "005930": "00126380"
 ```
 
-GDELT URL을 따라가 언론사 기사 본문을 받지 않는다. 수집 결과를 LLM이나 매매 판단에 전달하는 코드는 아직 없다. 네이버 검색 결과와 뉴스토어 일반 상품은 AI 분석 경로에 연결하지 않는다. 데이터 이용 범위와 제공처 선택 근거는 [ADR-0001](docs/adr/0001-event-data-sources.md)에 기록했다.
+GDELT URL을 따라가 언론사 기사 본문을 받지 않는다. 연합인포맥스 RSS의 증권·IB/기업 피드는 각각 5분마다 조회할 수 있으며, 짧은 설명은 Jev 작업용 임시 파일에만 둔다. Jev 분석은 `events.jev.enabled=true`와 `JEV_API_KEY`가 있어야 실행된다. 임계치 초과 웹 검색·LLM 확인은 `events.search.enabled=true`와 `OPENAI_API_KEY`가 있어야 실행된다. 점수의 매매 판단 연결과 실제 API 품질 검증은 아직 남아 있다. 출처와 이용 범위는 [ADR-0002](docs/adr/0002-event-issue-scoring.md)에 기록했다. 두 모델 작업자는 각각 별도 스레드에서 실행되며 기본적으로 비활성이다. 키를 설정하더라도 각 `enabled` 설정을 켜기 전에는 유료 API 호출을 하지 않는다.
 
 로컬 Mac에서 계속 실행하려면 `.env`에 `DART_API_KEY`를 넣고, `data/dev/event-dev.yml`에 조회할 종목을 설정한 뒤 [사건 수집기 실행 안내](monitoring/README.md#사건-수집기-실행)에 따라 감독 프로세스를 시작한다. `.env`는 Git에서 제외하며 파일 권한을 제한한다.
 

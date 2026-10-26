@@ -14,6 +14,20 @@ events:
     searches: {}
     poll-interval: 5m
     min-request-gap: 10s
+  rss:
+    enabled: false
+    poll-interval: 5m
+  jev:
+    enabled: false
+    api-key: ${JEV_API_KEY:}
+    model: jev-1.13.0
+    analysis-version: issue-v1-jev-1.13.0
+  search:
+    enabled: false
+    api-key: ${OPENAI_API_KEY:}
+    model: gpt-4.1-mini
+    threshold: 0.6
+    max-calls-per-day: 10
   dart:
     enabled: false
     api-key: ${DART_API_KEY:}

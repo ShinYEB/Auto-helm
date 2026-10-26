@@ -13,13 +13,14 @@ class EventHealth(private val properties: EventProperties, private val mapper: O
     private val sources = mutableMapOf(
         EventSource.DART to SourceHealth(properties.dart.enabled),
         EventSource.GDELT to SourceHealth(properties.gdelt.enabled),
+        EventSource.EINFOMAX to SourceHealth(properties.rss.enabled),
     )
+    private val rssFeeds = mutableMapOf<String, RssFeedHealth>()
     private var running = false
     private var lastWrite = Instant.EPOCH
 
-    fun started(existingIds: Set<String>) {
-        sources.getValue(EventSource.DART).discovered = existingIds.count { it.startsWith("DART:") }.toLong()
-        sources.getValue(EventSource.GDELT).discovered = existingIds.count { it.startsWith("GDELT:") }.toLong()
+    fun started(existingSourceCounts: Map<EventSource, Long>) {
+        for ((source, state) in sources) state.discovered = existingSourceCounts[source] ?: 0
         running = true
         write()
     }
@@ -53,6 +54,16 @@ class EventHealth(private val properties: EventProperties, private val mapper: O
         write()
     }
 
+    fun rssFeed(feed: String, items: Int, overlap: Int?, discovered: Int, possibleGap: Boolean) {
+        val state = rssFeeds.getOrPut(feed) { RssFeedHealth() }
+        state.lastItemCount = items
+        state.lastOverlap = overlap
+        state.lastNewCount = discovered
+        state.lastSuccessAt = Instant.now()
+        if (possibleGap) state.possibleGaps++
+        write()
+    }
+
     private fun write() {
         val now = Instant.now()
         try {
@@ -64,6 +75,7 @@ class EventHealth(private val properties: EventProperties, private val mapper: O
                     "running" to running,
                     "heartbeatAt" to now,
                     "sources" to sources.mapKeys { it.key.name },
+                    "rssFeeds" to rssFeeds,
                 ))
                 try {
                     Files.move(temporary, path, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
@@ -79,6 +91,14 @@ class EventHealth(private val properties: EventProperties, private val mapper: O
         }
     }
 }
+
+private data class RssFeedHealth(
+    var lastItemCount: Int = 0,
+    var lastOverlap: Int? = null,
+    var lastNewCount: Int = 0,
+    var lastSuccessAt: Instant? = null,
+    var possibleGaps: Long = 0,
+)
 
 private data class SourceHealth(
     val enabled: Boolean,

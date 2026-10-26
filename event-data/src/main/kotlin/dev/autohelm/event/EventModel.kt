@@ -3,7 +3,7 @@ package dev.autohelm.event
 import com.fasterxml.jackson.annotation.JsonIgnore
 import java.time.Instant
 
-enum class EventSource { GDELT, DART }
+enum class EventSource { GDELT, DART, EINFOMAX }
 
 data class EventRecord(
     val id: String,
@@ -17,6 +17,7 @@ data class EventRecord(
     val firstSeenAt: Instant,
     val inputScope: String,
     val contentPath: String? = null,
+    val providerId: String? = null,
 )
 
 data class EventLink(
@@ -26,6 +27,17 @@ data class EventLink(
 ) {
     @get:JsonIgnore
     val id: String get() = "$eventId:$symbol"
+}
+
+data class EventObservation(
+    val eventId: String,
+    val source: EventSource,
+    val providerId: String,
+    val receivedAt: Instant,
+    val feedOrQuery: String,
+) {
+    @get:JsonIgnore
+    val id: String get() = "$eventId:$providerId"
 }
 
 data class RawFetch(
