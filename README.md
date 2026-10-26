@@ -26,7 +26,7 @@ market:
   data-dir: ./data
   symbols: ["005930"]
   rest-url: https://openapivts.koreainvestment.com:29443
-  ws-url: ws://ops.koreainvestment.com:31000/tryitout
+  ws-url: ws://ops.koreainvestment.com:31000
   sessions:
     - venue: KRX
       name: regular

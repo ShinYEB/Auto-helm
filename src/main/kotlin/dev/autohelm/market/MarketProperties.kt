@@ -15,7 +15,7 @@ data class MarketProperties(
     val queueCapacity: Int = 10_000,
     val lateGrace: Duration = Duration.ofSeconds(3),
     val restUrl: String = "https://openapivts.koreainvestment.com:29443",
-    val wsUrl: String = "ws://ops.koreainvestment.com:31000/tryitout",
+    val wsUrl: String = "ws://ops.koreainvestment.com:31000",
     val appKey: String = "",
     val appSecret: String = "",
     val sessions: List<SessionWindow> = emptyList(),
