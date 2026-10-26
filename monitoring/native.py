@@ -77,6 +77,7 @@ def start():
     base_env = os.environ.copy()
     base_env.pop("KIS_APP_KEY", None)
     base_env.pop("KIS_APP_SECRET", None)
+    base_env.pop("DART_API_KEY", None)
     exporter_env = {**base_env, "AUTOHELM_DATA_ROOT": str(REPO / "data/dev"),
                     "AUTOHELM_EXPORTER_HOST": "127.0.0.1", "AUTOHELM_TEST_DATE": "2026-10-26"}
     grafana_env = {**base_env, "GF_PATHS_PROVISIONING": str(ROOT / "grafana/provisioning"),

@@ -1,0 +1,56 @@
+{
+  "uid": "autohelm-event-data",
+  "title": "Auto-helm | Event Data",
+  "tags": ["auto-helm", "event-data"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "15s",
+  "time": { "from": "now-6h", "to": "now" },
+  "panels": [
+    {
+      "id": 1, "type": "stat", "title": "사건 수집기 실행",
+      "gridPos": { "x": 0, "y": 0, "w": 6, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "autohelm-prometheus" },
+      "targets": [{ "expr": "autohelm_event_up", "refId": "A" }],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "colorMode": "value", "graphMode": "none" },
+      "fieldConfig": { "defaults": { "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 1 }] }, "mappings": [{ "type": "value", "options": { "0": { "text": "중단" }, "1": { "text": "실행 중" } } }] }, "overrides": [] }
+    },
+    {
+      "id": 2, "type": "stat", "title": "DART 마지막 성공 후 경과",
+      "gridPos": { "x": 6, "y": 0, "w": 6, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "autohelm-prometheus" },
+      "targets": [{ "expr": "time() - autohelm_event_last_success_timestamp_seconds{source=\"DART\"}", "refId": "A" }],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "colorMode": "value", "graphMode": "none" },
+      "fieldConfig": { "defaults": { "unit": "s", "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 1200 }, { "color": "red", "value": 2400 }] } }, "overrides": [] }
+    },
+    {
+      "id": 3, "type": "stat", "title": "DART 발견 공시",
+      "gridPos": { "x": 12, "y": 0, "w": 6, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "autohelm-prometheus" },
+      "targets": [{ "expr": "autohelm_event_discovered_total{source=\"DART\"}", "refId": "A" }],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "colorMode": "value", "graphMode": "none" }
+    },
+    {
+      "id": 4, "type": "stat", "title": "DART 실패 조회",
+      "gridPos": { "x": 18, "y": 0, "w": 6, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "autohelm-prometheus" },
+      "targets": [{ "expr": "autohelm_event_queries_total{source=\"DART\",result=\"failure\"}", "refId": "A" }],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "colorMode": "value", "graphMode": "none" }
+    },
+    {
+      "id": 5, "type": "timeseries", "title": "제공처별 조회",
+      "gridPos": { "x": 0, "y": 4, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "autohelm-prometheus" },
+      "targets": [{ "expr": "increase(autohelm_event_queries_total{result=\"success\"}[30m])", "legendFormat": "{{source}} 성공", "refId": "A" }, { "expr": "increase(autohelm_event_queries_total{result=\"failure\"}[30m])", "legendFormat": "{{source}} 실패", "refId": "B" }],
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] }, "options": { "legend": { "displayMode": "list", "placement": "bottom" } }
+    },
+    {
+      "id": 6, "type": "timeseries", "title": "새 사건과 제한 응답",
+      "gridPos": { "x": 12, "y": 4, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "autohelm-prometheus" },
+      "targets": [{ "expr": "increase(autohelm_event_discovered_total[30m])", "legendFormat": "{{source}} 새 사건", "refId": "A" }, { "expr": "increase(autohelm_event_rate_limits_total[30m])", "legendFormat": "{{source}} 제한", "refId": "B" }],
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] }, "options": { "legend": { "displayMode": "list", "placement": "bottom" } }
+    }
+  ]
+}

@@ -1,4 +1,4 @@
-"""Read-only Prometheus exporter for the running market-day collector.
+"""Read-only Prometheus exporter for market and event collectors.
 
 The collector keeps its own JSONL journal. This process tails those files and
 never needs KIS credentials or access to the trading API.
@@ -168,6 +168,31 @@ class Metrics:
             lines.append(sample("autohelm_market_gaps_total", self.gaps[reason], {"reason": reason}))
         for kind in ("websocket_connection", "subscription_rejected", "invalid_frame", "pipeline_error", "collector_exit"):
             lines.append(sample("autohelm_market_log_events_total", self.log_errors[kind], {"kind": kind}))
+        try:
+            event = json.loads((DATA_ROOT / "events/health.json").read_text())
+        except (FileNotFoundError, UnicodeDecodeError, json.JSONDecodeError):
+            event = {}
+        pid = event.get("pid")
+        try:
+            os.kill(int(pid), 0)
+            event_process_alive = True
+        except (TypeError, ValueError, ProcessLookupError, PermissionError):
+            event_process_alive = False
+        lines.append(sample("autohelm_event_up", int(bool(event.get("running")) and event_process_alive)))
+        lines.append(sample("autohelm_event_heartbeat_timestamp_seconds", epoch(event.get("heartbeatAt"))))
+        for source in ("DART", "GDELT"):
+            state = event.get("sources", {}).get(source, {})
+            labels = {"source": source}
+            lines += [
+                sample("autohelm_event_source_enabled", int(bool(state.get("enabled"))), labels),
+                sample("autohelm_event_queries_total", int(state.get("attempts", 0)), {**labels, "result": "attempt"}),
+                sample("autohelm_event_queries_total", int(state.get("successes", 0)), {**labels, "result": "success"}),
+                sample("autohelm_event_queries_total", int(state.get("failures", 0)), {**labels, "result": "failure"}),
+                sample("autohelm_event_rate_limits_total", int(state.get("rateLimits", 0)), labels),
+                sample("autohelm_event_discovered_total", int(state.get("discovered", 0)), labels),
+                sample("autohelm_event_last_attempt_timestamp_seconds", epoch(state.get("lastAttemptAt")), labels),
+                sample("autohelm_event_last_success_timestamp_seconds", epoch(state.get("lastSuccessAt")), labels),
+            ]
         lines.append(sample("autohelm_exporter_parse_errors_total", sum(t.parse_errors for t in self.tails)))
         return "".join(lines).encode()
 

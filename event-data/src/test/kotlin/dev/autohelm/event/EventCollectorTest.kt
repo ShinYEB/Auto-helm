@@ -40,10 +40,10 @@ class EventCollectorTest {
                 collector.start()
                 try {
                     val deadline = System.nanoTime() + Duration.ofSeconds(5).toNanos()
-                    val linkDirectory = directory.resolve("dev/events/links")
-                    while ((!Files.isDirectory(linkDirectory) || Files.list(linkDirectory).use { files ->
-                            files.noneMatch { Files.size(it) > 0 }
-                        }) && System.nanoTime() < deadline) {
+                    val healthFile = directory.resolve("dev/events/health.json")
+                    while (System.nanoTime() < deadline) {
+                        if (Files.exists(healthFile) && mapper.readTree(healthFile.toFile())
+                                .path("sources").path("GDELT").path("successes").asInt() >= 1) break
                         Thread.sleep(25)
                     }
                 } finally { collector.stop() }
@@ -56,6 +56,10 @@ class EventCollectorTest {
             assertEquals(1, eventLines)
             assertEquals(1, linkLines)
             assertTrue(EventJournal(properties, mapper).existingLinkIds().single().endsWith(":005930"))
+            val health = mapper.readTree(directory.resolve("dev/events/health.json").toFile())
+            assertEquals(1, health.path("sources").path("GDELT").path("discovered").asInt())
+            assertTrue(health.path("sources").path("GDELT").path("successes").asInt() >= 1)
+            assertEquals(false, health.path("running").asBoolean())
         } finally { server.stop(0) }
     }
 }

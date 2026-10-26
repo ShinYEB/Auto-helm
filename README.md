@@ -87,6 +87,8 @@ events:
 
 GDELT URL을 따라가 언론사 기사 본문을 받지 않는다. 수집 결과를 LLM이나 매매 판단에 전달하는 코드는 아직 없다. 네이버 검색 결과와 뉴스토어 일반 상품은 AI 분석 경로에 연결하지 않는다. 데이터 이용 범위와 제공처 선택 근거는 [ADR-0001](docs/adr/0001-event-data-sources.md)에 기록했다.
 
+로컬 Mac에서 계속 실행하려면 `.env`에 `DART_API_KEY`를 넣고, `data/dev/event-dev.yml`에 조회할 종목을 설정한 뒤 [사건 수집기 실행 안내](monitoring/README.md#사건-수집기-실행)에 따라 감독 프로세스를 시작한다. `.env`는 Git에서 제외하며 파일 권한을 제한한다.
+
 ## 저장 데이터
 
 `market-data`는 `data/<환경>/market/` 아래에 거래일별 JSONL 파일을 만든다.
