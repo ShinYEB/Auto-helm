@@ -32,11 +32,11 @@ class EventAdaptersTest {
         server.start()
         try {
             val properties = EventProperties(dataDir = directory, gdelt = GdeltProperties(
-                enabled = true, searches = mapOf("005930" to "삼성전자"),
+                enabled = true, searches = mapOf("005930" to "\"Samsung Electronics\""),
                 endpoint = URI.create("http://127.0.0.1:${server.address.port}/doc"),
             ))
             val startedAt = Instant.now()
-            val result = GdeltAdapter(properties, mapper).fetch("005930", "삼성전자")
+            val result = GdeltAdapter(properties, mapper).fetch("005930", "\"Samsung Electronics\"")
             assertEquals(1, result.records.size)
             val record = result.records.single()
             assertEquals("https://news.example/a?id=7", record.url)

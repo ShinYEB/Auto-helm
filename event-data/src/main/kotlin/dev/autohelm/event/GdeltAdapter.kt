@@ -21,6 +21,9 @@ class GdeltAdapter(
     private val dateFormat = DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmss'Z'")
 
     fun fetch(symbol: String, keyword: String): FetchResult {
+        require(keyword.isNotBlank() && keyword.all { it.code < 128 }) {
+            "GDELT DOC query must use English keywords"
+        }
         val query = URLEncoder.encode(keyword, StandardCharsets.UTF_8)
         val uri = URI.create("${properties.gdelt.endpoint}?query=$query&mode=artlist&format=json&sort=datedesc&maxrecords=100&timespan=1h")
         val request = HttpRequest.newBuilder(uri).timeout(Duration.ofSeconds(25)).GET().build()

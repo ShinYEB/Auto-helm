@@ -39,7 +39,7 @@ class EventCollector(
     private val previousRssIds = mutableMapOf<String, Set<String>>()
     private var lastGdeltRequest = Instant.EPOCH
     private var gdeltBlockedUntil = Instant.EPOCH
-    private var gdeltBackoff = Duration.ofMinutes(1)
+    private var gdeltBackoff = Duration.ofMinutes(15)
     @Volatile private var running = false
     private var thread: Thread? = null
 
@@ -202,16 +202,18 @@ class EventCollector(
         try {
             val result = gdelt.fetch(symbol, keyword)
             val discovered = save(result)
-            gdeltBackoff = Duration.ofMinutes(1)
+            gdeltBackoff = Duration.ofMinutes(15)
             health.success(EventSource.GDELT, discovered)
             log.info("GDELT query completed: symbol={}, candidates={}", symbol, result.records.size)
         } catch (ex: RateLimitedException) {
-            val wait = parseRetryAfter(ex.retryAfter, now) ?: gdeltBackoff
+            val wait = maxOf(parseRetryAfter(ex.retryAfter, now) ?: Duration.ZERO, gdeltBackoff)
             gdeltBlockedUntil = clock.instant().plus(wait)
-            gdeltBackoff = gdeltBackoff.multipliedBy(2).coerceAtMost(Duration.ofMinutes(15))
+            gdeltBackoff = gdeltBackoff.multipliedBy(2).coerceAtMost(Duration.ofHours(2))
             health.failure(EventSource.GDELT, "RATE_LIMITED")
             log.warn("GDELT rate limited; waiting {} seconds", wait.seconds)
         } catch (ex: Exception) {
+            gdeltBlockedUntil = clock.instant().plus(gdeltBackoff)
+            gdeltBackoff = gdeltBackoff.multipliedBy(2).coerceAtMost(Duration.ofHours(2))
             health.failure(EventSource.GDELT, "ERROR")
             log.warn("GDELT query failed for {}: {}", symbol, ex.javaClass.simpleName)
         }

@@ -38,4 +38,11 @@ class WatchlistStoreTest {
         assertThatThrownBy { store.put("005930", SymbolInput(0, "Samsung", setOf("KRX"))) }
             .isInstanceOf(IllegalArgumentException::class.java)
     }
+
+    @Test
+    fun `GDELT query requires English search terms`() {
+        val store = WatchlistStore(ControlProperties(dataDir = directory), mapper)
+        assertThatThrownBy { store.put("005930", SymbolInput(0, "삼성전자", setOf("KRX"), "삼성전자")) }
+            .isInstanceOf(IllegalArgumentException::class.java)
+    }
 }

@@ -119,7 +119,9 @@ data class GdeltProperties(
         require(minRequestGap >= Duration.ofSeconds(5))
         if (enabled) {
             require(searches.keys.all { it.matches(Regex("[0-9A-Z]{6}")) })
-            require(searches.values.all { it.isNotBlank() })
+            require(searches.values.all { it.isNotBlank() && it.all { char -> char.code < 128 } }) {
+                "GDELT DOC queries must use English keywords"
+            }
         }
     }
 }

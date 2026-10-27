@@ -39,6 +39,9 @@ class WatchlistStore(private val properties: ControlProperties, private val mapp
     fun put(symbol: String, input: SymbolInput): WatchlistSnapshot {
         require(properties.environment == "dev") { "Watchlist edits are available only in dev" }
         require(symbol.matches(Regex("[0-9A-Z]{6}")))
+        require(input.gdeltQuery == null || input.gdeltQuery.all { it.code < 128 }) {
+            "GDELT 검색어는 영어로 입력하세요"
+        }
         val before = current()
         if (before.revision != input.revision) throw RevisionConflict()
         val now = Instant.now()

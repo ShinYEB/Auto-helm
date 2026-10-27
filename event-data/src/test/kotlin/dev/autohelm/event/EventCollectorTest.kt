@@ -15,9 +15,35 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
 import java.time.Instant
+import java.util.concurrent.atomic.AtomicInteger
 
 class EventCollectorTest {
     @TempDir lateinit var directory: Path
+
+    @Test
+    fun `GDELT rate limit pauses requests instead of polling every cycle`() {
+        val calls = AtomicInteger()
+        val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
+        server.createContext("/doc") { exchange ->
+            calls.incrementAndGet()
+            exchange.sendResponseHeaders(429, -1)
+            exchange.close()
+        }
+        server.start()
+        val properties = EventProperties(enabled = true, dataDir = directory,
+            gdelt = GdeltProperties(enabled = true, searches = mapOf("005930" to "\"Samsung Electronics\""),
+                endpoint = URI.create("http://127.0.0.1:${server.address.port}/doc"),
+                pollInterval = Duration.ofMillis(100)))
+        val collector = EventCollector(properties, jacksonObjectMapper().registerModule(JavaTimeModule()))
+        try {
+            collector.start()
+            Thread.sleep(2300)
+            assertEquals(1, calls.get())
+        } finally {
+            collector.stop()
+            server.stop(0)
+        }
+    }
 
     @Test
     fun `poller records one event and link even after restart`() {
@@ -31,7 +57,7 @@ class EventCollectorTest {
         val properties = EventProperties(
             enabled = true, dataDir = directory,
             gdelt = GdeltProperties(
-                enabled = true, searches = mapOf("005930" to "삼성전자"),
+                enabled = true, searches = mapOf("005930" to "\"Samsung Electronics\""),
                 endpoint = URI.create("http://127.0.0.1:${server.address.port}/doc"),
                 pollInterval = Duration.ofMillis(200),
             ),

@@ -160,7 +160,7 @@ events:
   gdelt:
     enabled: true
     searches:
-      "005930": "삼성전자"
+      "005930": '"Samsung Electronics"'
   dart:
     enabled: false
 ```
