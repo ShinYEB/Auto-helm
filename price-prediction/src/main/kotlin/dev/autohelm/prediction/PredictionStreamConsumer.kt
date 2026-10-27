@@ -60,7 +60,8 @@ class PredictionStreamConsumer(
                 break
             } catch (ex: Exception) {
                 groupReady = false
-                log.warn("Prediction Stream consumer delayed: {}", ex.javaClass.simpleName)
+                val cause = generateSequence(ex as Throwable) { it.cause }.last()
+                log.warn("Prediction Stream consumer delayed: {}: {}", cause.javaClass.simpleName, cause.message)
                 try { Thread.sleep(5000) } catch (_: InterruptedException) { break }
             }
         }
@@ -71,7 +72,7 @@ class PredictionStreamConsumer(
         try {
             redis.opsForStream<String, String>().createGroup(stream, ReadOffset.from("0-0"), group)
         } catch (ex: Exception) {
-            if ("BUSYGROUP" !in (ex.message ?: "")) throw ex
+            if (generateSequence(ex as Throwable) { it.cause }.none { "BUSYGROUP" in (it.message ?: "") }) throw ex
         }
         groupReady = true
     }
