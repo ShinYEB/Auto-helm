@@ -57,6 +57,11 @@ def secret_env():
                        if line.startswith("OPENAI_API_KEY=")), "")
     if openai_key:
         env["OPENAI_API_KEY"] = openai_key
+    for name in ("NAVER_API_HUB_CLIENT_ID", "NAVER_API_HUB_CLIENT_SECRET"):
+        value = next((line.partition("=")[2].strip() for line in ENV_FILE.read_text().splitlines()
+                      if line.startswith(name + "=")), "")
+        if value:
+            env[name] = value
     return env
 
 

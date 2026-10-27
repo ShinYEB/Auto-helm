@@ -98,7 +98,8 @@ def credentials():
     for line in ENV_FILE.read_text().splitlines():
         if line and not line.startswith("#") and "=" in line:
             key, value = line.split("=", 1)
-            if key in {"KIS_APP_KEY", "KIS_APP_SECRET", "DART_API_KEY", "JEV_API_KEY"}:
+            if key in {"KIS_APP_KEY", "KIS_APP_SECRET", "DART_API_KEY", "JEV_API_KEY",
+                       "NAVER_API_HUB_CLIENT_ID", "NAVER_API_HUB_CLIENT_SECRET"}:
                 values[key] = value.strip()
     missing = {"KIS_APP_KEY", "KIS_APP_SECRET", "DART_API_KEY", "JEV_API_KEY"} - values.keys()
     if missing or any(not value for value in values.values()):
