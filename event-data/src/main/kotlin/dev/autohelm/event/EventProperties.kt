@@ -12,6 +12,7 @@ data class EventProperties(
     val dataDir: Path = Path.of("./data"),
     val gdelt: GdeltProperties = GdeltProperties(),
     val rss: RssProperties = RssProperties(),
+    val naver: NaverNewsProperties = NaverNewsProperties(),
     val jev: JevProperties = JevProperties(),
     val search: EventSearchProperties = EventSearchProperties(),
     val dart: DartProperties = DartProperties(),
@@ -19,7 +20,7 @@ data class EventProperties(
 ) {
     init {
         require(environment in setOf("dev", "prd"))
-        if (enabled) require(gdelt.enabled || dart.enabled || rss.enabled) { "Enable at least one event source" }
+        if (enabled) require(gdelt.enabled || dart.enabled || rss.enabled || naver.enabled) { "Enable at least one event source" }
     }
 }
 
@@ -50,7 +51,7 @@ data class JevProperties(
     val apiKey: String = "",
     val endpoint: URI = URI.create("https://api.typesafe.ai/v1/systemone"),
     val model: String = "jev-1.13.0",
-    val analysisVersion: String = "issue-v1-jev-1.13.0",
+    val analysisVersion: String = "issue-v2-jev-1.13.0",
     val pollInterval: Duration = Duration.ofSeconds(5),
     val maxAttempts: Int = 2,
     val maxCallsPerDay: Int = 100,
@@ -70,6 +71,9 @@ data class RssProperties(
     val feeds: Map<String, URI> = mapOf(
         "stocks" to URI.create("https://news.einfomax.co.kr/rss/S1N2.xml"),
         "business" to URI.create("https://news.einfomax.co.kr/rss/S1N7.xml"),
+        "policy" to URI.create("https://news.einfomax.co.kr/rss/S1N15.xml"),
+        "fx" to URI.create("https://news.einfomax.co.kr/rss/S1N16.xml"),
+        "international" to URI.create("https://news.einfomax.co.kr/rss/S1N23.xml"),
     ),
     val pollInterval: Duration = Duration.ofMinutes(5),
 ) {
@@ -77,6 +81,22 @@ data class RssProperties(
         require(!pollInterval.isNegative && !pollInterval.isZero)
         require(feeds.isNotEmpty() && feeds.keys.all { it.isNotBlank() })
         require(feeds.values.all { it.scheme in setOf("http", "https") })
+    }
+}
+
+data class NaverNewsProperties(
+    val enabled: Boolean = false,
+    val clientId: String = "",
+    val clientSecret: String = "",
+    val endpoint: URI = URI.create("https://naverapihub.apigw.ntruss.com/search/v1/news"),
+    val pollInterval: Duration = Duration.ofMinutes(5),
+    val maxCallsPerDay: Int = 500,
+    val display: Int = 30,
+) {
+    init {
+        require(!pollInterval.isNegative && !pollInterval.isZero)
+        require(maxCallsPerDay in 1..25_000 && display in 1..100)
+        if (enabled) require(clientId.isNotBlank() && clientSecret.isNotBlank())
     }
 }
 

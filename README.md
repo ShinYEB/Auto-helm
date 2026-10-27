@@ -156,6 +156,7 @@ events:
   rss:
     enabled: true
     poll-interval: 5m
+    # 기본값: 증권, IB/기업, 정책/금융, 채권/외환, 국제뉴스
   gdelt:
     enabled: true
     searches:
@@ -180,7 +181,7 @@ events:
       "005930": "00126380"
 ```
 
-GDELT URL을 따라가 언론사 기사 본문을 받지 않는다. 연합인포맥스 RSS의 증권·IB/기업 피드는 각각 5분마다 조회할 수 있으며, 짧은 설명은 Jev 작업용 임시 파일에만 둔다. Jev 분석은 `events.jev.enabled=true`와 `JEV_API_KEY`가 있어야 실행된다. 임계치 초과 웹 검색·LLM 확인은 `events.search.enabled=true`와 `OPENAI_API_KEY`가 있어야 실행된다. 점수의 매매 판단 연결과 실제 API 품질 검증은 아직 남아 있다. 출처와 이용 범위는 [ADR-0002](docs/adr/0002-event-issue-scoring.md)에 기록했다. 두 모델 작업자는 각각 별도 스레드에서 실행되며 기본적으로 비활성이다. 키를 설정하더라도 각 `enabled` 설정을 켜기 전에는 유료 API 호출을 하지 않는다.
+GDELT URL을 따라가 언론사 기사 본문을 받지 않는다. 연합인포맥스 RSS의 다섯 피드는 각각 5분마다 조회하며, 짧은 설명은 Jev 작업용 임시 파일에만 둔다. NAVER 뉴스 검색은 [NAVER API HUB](https://api.ncloud-docs.com/docs/naver-api-hub-search-news)에서 발급한 `NAVER_API_HUB_CLIENT_ID`, `NAVER_API_HUB_CLIENT_SECRET`을 `.env`에 넣고 `events.naver.enabled=true`로 켜는 선택 경로다. 관심 종목명별 조회이며 일 500회 내부 한도를 둔다. 네이버 개발자센터의 신규 검색 API 키는 발급되지 않으므로 API HUB 키가 필요하다. 공시는 일부 주요사항 유형의 접수번호 일치 핵심 수치를 Jev 입력에 추가하고, 그 밖의 유형은 제목만 사용한다. Jev 분석은 `events.jev.enabled=true`와 `JEV_API_KEY`가 있어야 실행된다. 임계치 초과 웹 검색·LLM 확인은 `events.search.enabled=true`와 `OPENAI_API_KEY`가 있어야 실행된다. 점수의 매매 판단 연결과 실제 API 품질 검증은 아직 남아 있다. 출처와 이용 범위는 [ADR-0002](docs/adr/0002-event-issue-scoring.md)에 기록했다. 두 모델 작업자는 각각 별도 스레드에서 실행되며 기본적으로 비활성이다. 키를 설정하더라도 각 `enabled` 설정을 켜기 전에는 유료 API 호출을 하지 않는다.
 
 로컬 Mac에서 계속 실행하려면 `.env`에 `DART_API_KEY`를 넣고, `data/dev/event-dev.yml`에 조회할 종목을 설정한 뒤 [사건 수집기 실행 안내](monitoring/README.md#사건-수집기-실행)에 따라 감독 프로세스를 시작한다. `.env`는 Git에서 제외하며 파일 권한을 제한한다.
 

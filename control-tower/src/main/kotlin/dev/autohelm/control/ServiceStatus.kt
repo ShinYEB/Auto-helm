@@ -43,7 +43,7 @@ class ServiceStatus(
             Duration.between(at, clock.instant()) > Duration.ofSeconds(20) -> "STALE"
             else -> "RUNNING"
         }
-        ServiceObservation("event-data", state, at, "DART/GDELT 상태 파일")
+        ServiceObservation("event-data", state, at, "사건 수집 상태 파일")
     }
 
     private fun market(): ServiceObservation = observe("market-data") {

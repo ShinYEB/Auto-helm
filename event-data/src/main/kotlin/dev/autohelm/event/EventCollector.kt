@@ -23,6 +23,7 @@ class EventCollector(
     private val health = EventHealth(properties, mapper)
     private val gdelt = GdeltAdapter(properties, mapper)
     private val rss = InfomaxRssAdapter(properties)
+    private val naver = NaverNewsAdapter(properties, mapper)
     private val dart = OpenDartAdapter(properties, mapper)
     private val seen = mutableSetOf<String>()
     private val knownRecords = journal.existingRecords().toMutableMap()
@@ -32,6 +33,9 @@ class EventCollector(
     private val nextGdelt = mutableMapOf<String, Instant>()
     private val nextDart = mutableMapOf<String, Instant>()
     private val nextRss = mutableMapOf<String, Instant>()
+    private val nextNaver = mutableMapOf<String, Instant>()
+    private var naverCallDay = java.time.LocalDate.now(java.time.ZoneId.of("Asia/Seoul"))
+    private var naverCallsToday = journal.naverAttemptsOn(naverCallDay)
     private val previousRssIds = mutableMapOf<String, Set<String>>()
     private var lastGdeltRequest = Instant.EPOCH
     private var gdeltBlockedUntil = Instant.EPOCH
@@ -56,12 +60,15 @@ class EventCollector(
             val now = clock.instant()
             val gdeltSearches = managedSymbols.gdeltSearches()
             val dartCorpCodes = managedSymbols.dartCorpCodes()
+            val companyNames = managedSymbols.companyNames()
             nextGdelt.keys.retainAll(gdeltSearches.keys)
             nextDart.keys.retainAll(dartCorpCodes.keys)
             nextRss.keys.retainAll(properties.rss.feeds.keys)
+            nextNaver.keys.retainAll(companyNames.keys)
             gdeltSearches.keys.forEach { nextGdelt.putIfAbsent(it, Instant.EPOCH) }
             dartCorpCodes.keys.forEach { nextDart.putIfAbsent(it, Instant.EPOCH) }
             properties.rss.feeds.keys.forEach { nextRss.putIfAbsent(it, Instant.EPOCH) }
+            companyNames.keys.forEach { nextNaver.putIfAbsent(it, Instant.EPOCH) }
             if (properties.rss.enabled) {
                 val feed = nextRss.entries.firstOrNull { !now.isBefore(it.value) }?.key
                 if (feed != null) pollRss(feed, now)
@@ -70,12 +77,56 @@ class EventCollector(
                 val symbol = nextDart.entries.firstOrNull { !now.isBefore(it.value) }?.key
                 if (symbol != null) pollDart(symbol, dartCorpCodes.getValue(symbol), now)
             }
+            if (properties.naver.enabled) {
+                val symbol = nextNaver.entries.firstOrNull { !now.isBefore(it.value) }?.key
+                if (symbol != null) pollNaver(symbol, companyNames.getValue(symbol), now)
+            }
             if (properties.gdelt.enabled && !now.isBefore(gdeltBlockedUntil) &&
                 !now.isBefore(lastGdeltRequest.plus(properties.gdelt.minRequestGap))) {
                 val symbol = nextGdelt.entries.firstOrNull { !now.isBefore(it.value) }?.key
                 if (symbol != null) pollGdelt(symbol, gdeltSearches.getValue(symbol), now)
             }
             try { Thread.sleep(1000) } catch (_: InterruptedException) { break }
+        }
+    }
+
+    private fun pollNaver(symbol: String, companyName: String, now: Instant) {
+        nextNaver[symbol] = now.plus(properties.naver.pollInterval)
+        val today = now.atZone(java.time.ZoneId.of("Asia/Seoul")).toLocalDate()
+        if (today != naverCallDay) { naverCallDay = today; naverCallsToday = journal.naverAttemptsOn(today) }
+        if (naverCallsToday >= properties.naver.maxCallsPerDay) return
+        journal.appendNaverAttempt(symbol, now)
+        naverCallsToday++
+        health.attempt(EventSource.NAVER)
+        try {
+            val result = naver.fetch(companyName)
+            var discovered = 0
+            for (item in result.items) {
+                val record = item.record.let { candidate ->
+                    legacyNewsIds[candidate.url]?.let { candidate.copy(id = it) } ?: candidate
+                }
+                if (seen.add(record.id)) {
+                    try { journal.appendEvent(record) } catch (ex: Exception) {
+                        seen.remove(record.id)
+                        throw ex
+                    }
+                    knownRecords[record.id] = record
+                    discovered++
+                }
+                saveObservation(record, result.receivedAt, symbol)
+                if (mentionsCompany(record.title, companyName) ||
+                    (item.description != null && mentionsCompany(item.description, companyName))) {
+                    if (properties.jev.enabled && item.description != null) journal.saveWorking(record.id, item.description)
+                    saveLink(record.id, symbol, result.receivedAt)
+                }
+            }
+            health.success(EventSource.NAVER, discovered)
+        } catch (ex: RateLimitedException) {
+            nextNaver[symbol] = clock.instant().plus(parseRetryAfter(ex.retryAfter, now) ?: Duration.ofMinutes(15))
+            health.failure(EventSource.NAVER, "RATE_LIMITED")
+        } catch (ex: Exception) {
+            health.failure(EventSource.NAVER, "ERROR")
+            log.warn("NAVER query failed: symbol={}, error={}", symbol, ex.javaClass.simpleName)
         }
     }
 
@@ -182,6 +233,15 @@ class EventCollector(
                         seen += record.id
                         knownRecords[record.id] = record
                         discovered++
+                    }
+                    if (properties.jev.enabled && "${candidate.id}:$symbol" !in seenLinks) {
+                        try {
+                            dart.keyFacts(candidate, corpCode)?.let { journal.saveWorking(candidate.id, it) }
+                        } catch (ex: Exception) {
+                            health.failure(EventSource.DART, "DETAIL_ERROR")
+                            log.warn("OpenDART key facts failed: symbol={}, error={}", symbol, ex.javaClass.simpleName)
+                            continue // Keep the link pending so the next DART poll retries enrichment.
+                        }
                     }
                     saveLink(candidate.id, symbol, candidate.firstSeenAt)
                 }

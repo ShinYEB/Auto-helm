@@ -3,7 +3,7 @@ package dev.autohelm.event
 import com.fasterxml.jackson.annotation.JsonIgnore
 import java.time.Instant
 
-enum class EventSource { GDELT, DART, EINFOMAX }
+enum class EventSource { GDELT, DART, EINFOMAX, NAVER }
 
 data class EventRecord(
     val id: String,

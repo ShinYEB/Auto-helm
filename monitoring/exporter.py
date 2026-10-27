@@ -207,7 +207,7 @@ class Metrics:
             event_process_alive = False
         lines.append(sample("autohelm_event_up", int(bool(event.get("running")) and event_process_alive)))
         lines.append(sample("autohelm_event_heartbeat_timestamp_seconds", epoch(event.get("heartbeatAt"))))
-        for source in ("DART", "GDELT", "EINFOMAX"):
+        for source in ("DART", "GDELT", "EINFOMAX", "NAVER"):
             state = event.get("sources", {}).get(source, {})
             labels = {"source": source}
             lines += [

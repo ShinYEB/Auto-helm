@@ -21,6 +21,7 @@ class EventHealth(private val properties: EventProperties, private val mapper: O
         EventSource.DART to SourceHealth(properties.dart.enabled),
         EventSource.GDELT to SourceHealth(properties.gdelt.enabled),
         EventSource.EINFOMAX to SourceHealth(properties.rss.enabled),
+        EventSource.NAVER to SourceHealth(properties.naver.enabled),
     )
     private val rssFeeds = mutableMapOf<String, RssFeedHealth>()
     private var running = false

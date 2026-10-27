@@ -17,11 +17,17 @@ events:
   rss:
     enabled: false
     poll-interval: 5m
+  naver:
+    enabled: false
+    client-id: ${NAVER_API_HUB_CLIENT_ID:}
+    client-secret: ${NAVER_API_HUB_CLIENT_SECRET:}
+    poll-interval: 5m
+    max-calls-per-day: 500
   jev:
     enabled: false
     api-key: ${JEV_API_KEY:}
     model: jev-1.13.0
-    analysis-version: issue-v1-jev-1.13.0
+    analysis-version: issue-v2-jev-1.13.0
   search:
     enabled: false
     api-key: ${OPENAI_API_KEY:}

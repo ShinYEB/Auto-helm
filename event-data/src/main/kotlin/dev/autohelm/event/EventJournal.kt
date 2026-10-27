@@ -9,6 +9,7 @@ import java.nio.file.Path
 import java.nio.file.StandardCopyOption
 import java.nio.file.StandardOpenOption
 import java.time.Instant
+import java.time.LocalDate
 import java.time.ZoneId
 import java.util.UUID
 
@@ -24,6 +25,14 @@ class EventJournal(private val properties: EventProperties, private val mapper: 
     fun appendObservation(observation: EventObservation) = append("observations", observation.receivedAt, observation)
     fun appendAnalysis(result: IssueAnalysis) = append("analysis", result.completedAt, result)
     fun appendSearchResult(result: IssueSearchResult) = append("search", result.completedAt, result)
+    fun appendNaverAttempt(symbol: String, at: Instant) = append("naver-attempts", at,
+        mapOf("at" to at.toString(), "symbol" to symbol))
+
+    fun naverAttemptsOn(day: LocalDate): Int {
+        val file = root.resolve("naver-attempts/$day.jsonl")
+        if (!Files.isRegularFile(file)) return 0
+        return Files.newBufferedReader(file).useLines { lines -> lines.count { it.isNotBlank() } }
+    }
 
     fun existingIds(): MutableSet<String> {
         val ids = mutableSetOf<String>()

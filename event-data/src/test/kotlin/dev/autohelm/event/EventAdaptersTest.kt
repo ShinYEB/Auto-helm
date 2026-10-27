@@ -126,6 +126,59 @@ class EventAdaptersTest {
     }
 
     @Test
+    fun `NAVER API HUB search parses metadata without persisting the excerpt`() {
+        val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
+        server.createContext("/search/v1/news") { exchange ->
+            assertTrue(exchange.requestURI.rawQuery.contains("sort=date"))
+            assertEquals("client", exchange.requestHeaders.getFirst("X-NCP-APIGW-API-KEY-ID"))
+            assertEquals("secret", exchange.requestHeaders.getFirst("X-NCP-APIGW-API-KEY"))
+            val body = """{"items":[{"title":"<b>삼성전자</b> 실적","originallink":"https://news.example/a?utm_source=n&id=7","link":"https://n.news.naver.com/a","description":"<b>삼성전자</b> 매출 증가","pubDate":"Mon, 26 Oct 2026 18:00:00 +0900"}]}"""
+            exchange.sendResponseHeaders(200, body.toByteArray().size.toLong())
+            exchange.responseBody.use { it.write(body.toByteArray()) }
+        }
+        server.start()
+        try {
+            val properties = EventProperties(naver = NaverNewsProperties(
+                enabled = true, clientId = "client", clientSecret = "secret",
+                endpoint = URI.create("http://127.0.0.1:${server.address.port}/search/v1/news"),
+            ))
+            val item = NaverNewsAdapter(properties, mapper).fetch("삼성전자").items.single()
+            assertEquals("삼성전자 실적", item.record.title)
+            assertEquals("https://news.example/a?id=7", item.record.url)
+            assertEquals("삼성전자 매출 증가", item.description)
+            assertEquals(Instant.parse("2026-10-26T09:00:00Z"), item.record.publishedAt)
+            assertFalse(mapper.writeValueAsString(item.record).contains("매출 증가"))
+        } finally { server.stop(0) }
+    }
+
+    @Test
+    fun `OpenDART key facts use matching receipt and selected fields only`() {
+        val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
+        server.createContext("/api/tsstkAqDecsn.json") { exchange ->
+            assertTrue(exchange.requestURI.rawQuery.contains("corp_code=00126380"))
+            val body = """{"status":"000","list":[
+                {"rcept_no":"20261026000001","aqpln_prc_ostk":"999","private_name":"ignored"},
+                {"rcept_no":"20261026000002","aqpln_stk_ostk":"1000","aqpln_prc_ostk":"5000000","private_name":"ignored"}
+            ]}"""
+            exchange.sendResponseHeaders(200, body.toByteArray().size.toLong())
+            exchange.responseBody.use { it.write(body.toByteArray()) }
+        }
+        server.start()
+        try {
+            val properties = EventProperties(dart = DartProperties(enabled = true, apiKey = "test-only",
+                corpCodes = mapOf("005930" to "00126380"),
+                endpoint = URI.create("http://127.0.0.1:${server.address.port}/api/")))
+            val record = EventRecord("DART:20261026000002", "dev", EventSource.DART, "자기주식 취득 결정",
+                "https://example.com", "005930", null, null, Instant.now(), "TITLE_WITH_OPTIONAL_KEY_FACTS")
+            val facts = OpenDartAdapter(properties, mapper).keyFacts(record, "00126380")!!
+            assertTrue(facts.contains("취득 예정 보통주 수: 1000"))
+            assertTrue(facts.contains("취득 예정 금액: 5000000"))
+            assertFalse(facts.contains("999"))
+            assertFalse(facts.contains("private_name"))
+        } finally { server.stop(0) }
+    }
+
+    @Test
     fun `journal recovers complete records and isolates environments`() {
         val properties = EventProperties(dataDir = directory)
         val journal = EventJournal(properties, mapper)
@@ -134,6 +187,8 @@ class EventAdaptersTest {
             null, null, null, at, "METADATA_ONLY")
         journal.appendEvent(record)
         journal.appendLink(EventLink(record.id, "005930", at))
+        journal.appendNaverAttempt("005930", at)
+        assertEquals(1, journal.naverAttemptsOn(java.time.LocalDate.parse("2026-10-26")))
         val file = directory.resolve("dev/events/events/2026-10-26.jsonl")
         Files.writeString(file, "{\"incomplete\"", java.nio.file.StandardOpenOption.APPEND)
         assertEquals(setOf(record.id), EventJournal(properties, mapper).existingIds())

@@ -83,7 +83,7 @@ class ConsoleData(private val properties: ControlProperties, private val mapper:
         if (!Files.exists(file)) return emptyList()
         return runCatching {
             val nodes = mapper.readTree(Files.readAllBytes(file)).path("sources")
-            listOf("DART", "GDELT").map { name ->
+            listOf("DART", "GDELT", "EINFOMAX", "NAVER").map { name ->
                 val n = nodes.path(name)
                 SourceInfo(name, n.path("enabled").asBoolean(false), n.path("attempts").asLong(),
                     n.path("successes").asLong(), n.path("failures").asLong(),
